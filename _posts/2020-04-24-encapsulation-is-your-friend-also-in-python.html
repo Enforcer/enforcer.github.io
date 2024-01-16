@@ -1,0 +1,243 @@
+---
+layout: post
+title: Encapsulation is your friend, also in Python
+date: 2020-04-24 09:00:00.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- good practices
+- python
+- software engineering
+tags: []
+permalink: "/encapsulation-is-your-friend-also-in-python/"
+---
+<p><!-- wp:heading --></p>
+<h2>What is encapsulation?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Encapsulation is an act of deliberate limiting access to certain software components. The most common usage is to hide certain attributes of objects from other objects that use it. The most vivid example is the usage of so-called access modifiers, private and protected in languages that support it, for example, PHP:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class MyClass {
+    private function bar() {}
+    public function foo() {}
+}
+
+$myInstance = new MyClass();
+$myInstance->foo();
+$myInstance->bar();  // hey! that's private!</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Running this code results in Fatal error <code>Uncaught Error: Call to private method MyClass::bar()</code>. In compiled languages, violations of encapsulation are detected during compilation, so long before the program runs.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>In Python, the only substitute of such encapsulation is to prepend names of attributes with a single underscore:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class ApiClient:
+    def __init__(self, ...) -> None:
+        self._session = ...
+
+    def get_stats_for(self, url: str) -> Stats:
+        ...
+
+    def _make_request(self):
+        ...</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>By doing so, we hint potential users of <em>ApiClient</em> that they are not supposed to use <em>_make_request</em> or touch <em>_session</em> attributes. Interpreter won't complain, there will be no exceptions raised etc. It's a gentle suggestion - <em>please do not touch it</em>. The only effect of touching "private" attribute is that some linters (e.g. Pylint) and IDEs (e.g. PyCharm) will complain about it.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Is encapsulation only about classes?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>No, definitely not. Encapsulation is not limited to object-oriented programming. In fact, it is applicable to all programming styles that have some structure, including functional programming. The means to achieve that may differ, but the end result is what matters.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>In terms of Python, we may also think about exposing only a limited subset of objects in a module by using __all__ attribute.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># mymodule.py
+
+__all__ = &#91;'do_something']
+
+def do_something(arguments):
+    ...
+
+def foo():
+    ...
+
+def bar():
+    ...</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>The original application of <em>__all__</em> is a bit different, namely, it specifies which names will be imported once someone uses <em>from mymodule import *</em>. But it could also hint users of <em>mymodule.py </em>that they are not supposed to use or even import <em>foo</em> or <em>bar</em> directly.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>That was a simple example of a flat module. How about more complex, nested structure?</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>.
+├── payments
+│   ├── __init__.py 
+│   ├── api
+│   │   ├── __init__.py
+│   │   ├── consumer.py
+│   │   ├── exceptions.py
+│   │   ├── requests.py
+│   │   └── responses.py
+│   ├── config.py
+│   ├── dao.py
+│   ├── events.py
+│   ├── facade.py
+│   ├── models.py
+│   └── tests
+│       └── ...
+├── pytest.ini
+├── requirements-dev.txt
+├── requirements.txt
+└── setup.py</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Payments package has one sub-package - <em>api</em> and several sub-modules. That example uses code from my <a href="https://github.com/Enforcer/clean-architecture">example of The Clean Architecture implementation in Python</a>. You can read more about <a href="https://breadcrumbscollector.tech/the-clean-architecture-in-python-how-to-write-testable-and-flexible-code/">The Clean Architecture here</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>In such a case, I also suggest using <em>__all__</em> but only in top-level <em>__init__</em>.py of that package. From the point of view of the user, they are only allowed to import anything from there. Traversing structure to import something from 3-levels deep module is not allowed. Of course, for code that lies inside the package, this strict rule does not apply.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>.
+└── payments
+    ├── __init__.py   # from the outside world, only this module is interesting
+    └── ...
+
+# payments/__init__.py
+__all__ = &#91;
+    # module
+    "Payments",
+    "PaymentsConfig",
+    # facade
+    "PaymentsFacade",
+]
+
+# some_code_elsewhere.py
+from payments import PaymentsFacade  # this is fine
+
+from payments.api.consumer import ApiConsumer  # ? Don't...do...that!</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Why not just make everything public? #YOLO</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>It's all about being future-proof. Of course, we do not know what will the future bring, how the requirements will change etc. But we know very well how the code we write in this very moment will be used. We know what a user of it will need to run it, even if it is just us in a couple of minutes or a colleague waiting for our part. If there are functions/methods/objects/modules etc that are not needed, hide it.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p> Making the whole code public invites others to use it. When they start using it, you will find it much harder to change the code because you risk breaking up something. However, if you hide some details, in return you will get the freedom of rearranging those private attributes.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>For a code of a one-time script or a proof of concept, it may not matter. But for a project that will be developed for a few years, the disorder will grow and slow you down.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Publishing code is a solemn moment</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The thing is that making the code public should not be an automatic reaction. If we think in terms of libraries, too many moving parts visible from the outside may cause confusion and definitely does not make it easy to adopt the library. Yes, we compensate for this by writing documentation with extensive example snippets. But why not also make this visible in code? There are still geeks out there who will read your source code and will not be convinced to the work you did, even if the internal structure makes perfect sense to you. Use encapsulation to point them in the right direction. An interesting talk on the subject (of overwhelming libraries) is <a href="https://www.youtube.com/watch?v=o9pEzgHorH0">Stop writing classes by Jack Diederich</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>The same principle is applicable for code you write daily for the project you work on. The difference is your code will not be used by numbers of people but either indirectly by the end-user or elsewhere from code. Organize your functionality, make your easy and pleasant to use. By the way, did you know that PyCharm won't hint attributes whose names are prepended with "_"? That's what I am talking about. The person that uses your code has less chance to even notice there are any implementation details.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Facade design pattern</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>There is one particular pattern that helps to organize code, encapsulate it and make it easier to use.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:quote --></p>
+<blockquote class="wp-block-quote"><p><strong>Facade</strong>&nbsp;is a structural design pattern that provides a simplified interface to a library, a framework, or any other complex set of classes.</p>
+<p><cite><a href="https://refactoring.guru/design-patterns/facade">https://refactoring.guru/design-patterns/facade</a></cite></p></blockquote>
+<p><!-- /wp:quote --></p>
+<p><!-- wp:paragraph --></p>
+<p>Imagine you have developed a part of the application for a longer period of time. The functionality is scattered among several classes/modules inside this subsystem. Programmers that wish to use it, have to import code from at least a few nested modules. During my talk from 2017 <a href="https://www.youtube.com/watch?v=G5OeYHCJuv0">Why you don't need design patterns in Python</a>, I described a similar situation. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"id":743,"sizeSlug":"large"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2020/04/system_001.png" alt="" class="wp-image-743" /></figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>Later that year I was giving a slightly tweaked version of the same presentation at PyconPL conference. When I asked the audience if they think this is a sustainable design, no one raised their hands. When visualized, such coupling never looks good. Unfortunately, it is not that easy to spot such a situation in a code base.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now, let's see how a situation changes when we introduce a Facade:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"id":744,"sizeSlug":"large"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2020/04/system_002.png" alt="" class="wp-image-744" /></figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>Facade encapsulates our Advertisements module's internal structure. Code-wise, facade can be as simple as <em>__init__.py</em> module with loose functions:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># advertisements/__init__.py
+__all__ = &#91;
+    'get_advert_for_single_post',
+    'get_adverts_for_main_page',
+]
+
+def get_advert_for_single_post(post):
+    ...  # doing some heavy work there!
+
+def get_adverts_for_main_page(count): pass
+    ...  # doing even more heavy work there!
+
+# blog/some_module.py
+import advertisements
+adverts = advertisements.get_adverts_for_main_page(count=3)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>...or a class:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class PaymentsFacade:
+    def __init__(self, ...) -> None:
+        ...
+
+    def get_pending_payments(self, customer_id: int) -> List&#91;dao.PaymentDto]:
+        ...
+
+    def start_new_payment(self, payment_uuid: UUID, customer_id: int, amount: Money, description: str) -> None:
+        ...
+
+    def charge(self, payment_uuid: UUID, customer_id: int, token: str) -> None:
+        ...
+
+    def capture(self, payment_uuid: UUID, customer_id: int) -> None:
+        ...
+</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>An aspect of modularity of a project is very interesting but is definitely out of the scope of this blog post. I dedicated a lot of space for it in my book, <a href="https://leanpub.com/implementing-the-clean-architecture">Implementing The Clean Architecture</a> in a chapter called Modularity. You can also find them implemented in the aforementioned <a href="https://github.com/Enforcer/clean-architecture">The Clean Architecture implementation example</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Encapsulation versus testing</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The myth about (unit-)testing is that we need to test each, even the smallest function and class separately. There is nothing farther from the truth; in reality, encapsulated components should rarely have tests for their own. It makes sense for functions or classes that behave like validators or calculators, i.e. are trivial to test and have dozens of test cases.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Testing every bit of code in separation quickly leads to overspecification and makes your code rigid. I mention the problem in <a href="https://breadcrumbscollector.tech/beware-of-chicken-testing-or-mocks-overuse/">my article about overusing mocks</a>. Maybe the code is not used externally, but if your tests are coupled to the implementation, they won't make it easy to refactor or change it.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>On the other hand, testing via Facade or another layer of indirection gives considerable freedom to play around with encapsulated components. In particular, I discourage testing private methods of your classes. Test them via public ones or if it makes sense and they are calculator/validator in disguise, extract them as a function and cover the rest of cases. But also do not mock it in tests of the original class. :)</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Be more careful about making your code public; it invites others to use it. Once they do, maintenance costs will grow.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Try another approach - instead of making everything public by default, declare your attributes as private (prepend with "_") and require a good reason to publish them. Even if code is complex under the hood because there are many business requirements it must satisfy, it still may be pleasant to use.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><a href="https://pixabay.com/pl/illustrations/nie-dotyka%C4%87-przypomnienie-uwaga-post-1433095/">Image source</a></p>
+<p><!-- /wp:paragraph --></p>

@@ -1,0 +1,59 @@
+---
+layout: post
+title: Dive into Python’s asyncio, part 5 - protocols
+date: 2017-05-14 19:23:25.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- asyncio
+- dajsiepoznac2017
+tags: []
+permalink: "/dive-into-pythons-asyncio-part-5-protocols/"
+---
+<p>Protocols are asyncio's primitives supplied as convenient base classes to quickly set up clients or servers using TCP/UDP (+ subprocesses). These are especially helpful when we need to implement low level handling of protocol of some sort. I believe they are inspired by <a href="http://twistedmatrix.com/documents/8.2.0/api/twisted.internet.protocol.Protocol.html">Twisted's protcols</a>.</p>
+<p>Simple example of TCP echo server protocol may be (taken from asyncio docs):</p>
+<pre class="lang:python decode:true">import asyncio
+
+class EchoServerClientProtocol(asyncio.Protocol):  # 1
+    def connection_made(self, transport):  # 2
+        self.transport = transport
+
+    def data_received(self, data):  # 3
+        self.transport.write(data)
+
+    def connection_lost(self, exc):  # 4
+        print('Connection ended')
+
+
+loop = asyncio.get_event_loop()
+coro = loop.create_server(EchoServerClientProtocol, '127.0.0.1', 8888)  # 5
+server = loop.run_until_complete(coro)
+
+try:
+    loop.run_forever()
+except KeyboardInterrupt:
+    pass
+
+server.close()
+loop.run_until_complete(server.wait_closed())
+loop.close()</pre>
+<ol>
+<li>First thing is to inherit from asyncio-provided base class asyncio.Protocol. It serves for handling TCP and SSL based communication.</li>
+<li>Implementing given protocol comes down to writing particular callbacks, starting from <em>connection_made</em> which is invoked everytime we have new connection from the outside.</li>
+<li><em>data_received </em>is called when client sends some data to the server</li>
+<li>connection_lost is invoked when connection ends either from client side or server.</li>
+</ol>
+<p>It all seems nice and clean, but where are coroutines? Where is <em>async</em> and <em>await</em>? Well, they are not there. If one needs to introduce them, then they should be decoupled using <em>asyncio.ensure_future</em>:</p>
+<pre class="lang:python decode:true ">class EchoServerClientProtocol(asyncio.Protocol):
+    # ...
+
+    def data_received(self, data):
+        asyncio.ensure_future(self.some_coro, data)
+
+    async def some_coro(self, data):
+        await async_operation
+</pre>
+<p>&nbsp;</p>

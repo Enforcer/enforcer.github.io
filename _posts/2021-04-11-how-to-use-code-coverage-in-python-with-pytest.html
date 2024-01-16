@@ -1,0 +1,333 @@
+---
+layout: post
+title: How to use code coverage in Python with pytest?
+date: 2021-04-11 19:49:05.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- python
+- testing software
+tags: []
+permalink: "/how-to-use-code-coverage-in-python-with-pytest/"
+---
+<p><!-- wp:heading --></p>
+<h2>Basics</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>What is code coverage?</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>In the simplest words, code coverage is a measure of exhaustiveness of a test suite. 100% code coverage means that a system is fully tested. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":4} --></p>
+<h4>Why bother about code coverage in Python?</h4>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Theoretically, the higher code coverage is, the fewer defects a system has. Of course, tests are not enough to catch all kinds of errors, but in this uneven battle, we need all the help we can get.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>From a very mechanical perspective, the codebase is composed of individual lines. Hence, a simple formula for code coverage would be <code>(number_of_code_lines_run_at_least_once_under_tests / total_number_of lines) * 100%</code>. It is only at first sight that this formula looks reasonable. It's way too insufficient. For the purpose of this article, consider the following piece of code:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre id="block-8d23a725-153e-4605-9f42-a779a14b97b5" class="wp-block-code"><code>from dataclasses import dataclass
+
+
+@dataclass
+class Patient:
+    age: int
+    is_pregnant: bool = False
+    is_regular_blood_donor: bool = False
+
+
+def determine_queue_position(patient, queue):
+    # initially, we assume that a patient will just join queue
+    position = len(queue)
+
+    # there are certain groups of patients that are served without
+    # having to wait in a queue
+    if patient.is_pregnant or patient.is_regular_blood_donor:
+        position = 0
+
+    return position</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Why focusing on just covering lines is not enough </h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now, let's assume we have a test for that:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>def test_pregnancy_means_accessing_doctor_without_having_to_wait():
+    queue = &#91;Patient(age=25), Patient(age=44)]
+    patient = Patient(age=28, is_pregnant=True)
+
+    queue_position = determine_queue_position(patient, queue)
+
+    assert queue_position == 0</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>This test exercises EVERY line of <code>determine_queue_position</code> function. According to our initial definition, we were able to get 100% code coverage with a single test. Yet this minimal test suite can be hardly called exhaustive! For example, we haven't tested against such patients:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>a regular blood donor</li>
+<li>both pregnant and regular blood donor</li>
+<li>neither pregnant nor regular blood donor</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>etc. Not to mention cases like a queue with one or more patients pregnant or being regular blood donor (the latter is not covered by implementation, so we won't be focusing on it anyway).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Types of code coverage</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>While the original definition of code coverage is still valid (a measure of exhaustiveness of a test suite), turns out there is a tricky part. Namely, how to assess if a test suite is actually exhaustive?</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":4} --></p>
+<h4>Statement coverage</h4>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>We already know that a naive approach with measuring executed lines of code won't cut it. On the bright side, it is the simplest one to understand. It is formally called line or statement coverage. This one is used by default in the most complete python code coverage lib - <a href="https://coverage.readthedocs.io/">coverage.py</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Assuming we have code in <code>func.py</code> and tests in <code>test_func.py</code> files, we can see coverage.py (+pytest-cov plugin) reports 100% code coverage:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>pytest --cov func
+
+============================ test session starts =============================
+platform darwin -- Python 3.9.0, pytest-6.2.3, py-1.10.0, pluggy-0.13.1
+rootdir: /Users/spb/Projects/private/bloggo/coverr
+plugins: cov-2.11.1
+collected 1 item
+
+test_func.py .                                                         &#91;100%]
+
+---------- coverage: platform darwin, python 3.9.0-final-0 -----------
+Name      Stmts   Miss  Cover
+-----------------------------
+func.py      11      0   100%
+-----------------------------
+TOTAL        11      0   100%
+
+
+============================= 1 passed in 0.04s ==============================</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>If statement coverage is so superficial, what are better alternatives?</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":4} --></p>
+<h4>Branch coverage</h4>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>While code indeed is composed out of lines, our execution is rarely sequential from the top to the bottom. This is because of if-statements (and similar mechanisms) that steer how the execution <em>flows</em>. When there is decision-making whether to do one or another thing, we call it branching. Respectively, possible code paths are called branches.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>This leads us to another type of code coverage - branch coverage. It is defined as <code>(number_of_branches_executed_at_least_once_under_tests / all_branches) * 100%</code>. This gives us a better idea about uncovered scenarios:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>pytest --cov func --cov-branch --cov-report term-missing
+
+============================ test session starts =============================
+platform darwin -- Python 3.9.0, pytest-6.2.3, py-1.10.0, pluggy-0.13.1
+rootdir: /Users/spb/Projects/private/bloggo/coverr
+plugins: cov-2.11.1
+collected 1 item
+
+test_func.py .                                                         &#91;100%]
+
+---------- coverage: platform darwin, python 3.9.0-final-0 -----------
+Name      Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------
+func.py      11      0      4      1    93%   17-&gt;20
+-----------------------------------------------------
+TOTAL        11      0      4      1    93%
+
+
+============================= 1 passed in 0.05s ==============================</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Branch coverage told us that we miss an if-statement at line 17th evaluates to False and the next executed line is <code>return position</code>. Covering it is a matter of testing with a patient that's not pregnant neither a regular blood donor:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>def test_not_pregnat_teenager_not_being_blood_donor_has_to_wait_in_queue():
+    queue = &#91;Patient(age=15), Patient(age=33)]
+    patient = Patient(age=13)
+
+    queue_position = determine_queue_position(patient, queue)
+
+    assert queue_position == 2</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Running test suite again shows we are now fully covered (at least in terms of branch coverage):</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>pytest --cov func --cov-branch --cov-report term-missing
+============================ test session starts =============================
+platform darwin -- Python 3.9.0, pytest-6.2.3, py-1.10.0, pluggy-0.13.1
+rootdir: /Users/spb/Projects/private/bloggo/coverr
+plugins: cov-2.11.1
+collected 2 items
+
+test_func.py ..                                                        &#91;100%]
+
+---------- coverage: platform darwin, python 3.9.0-final-0 -----------
+Name      Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------
+func.py      11      0      4      0   100%
+-----------------------------------------------------
+TOTAL        11      0      4      0   100%
+
+
+============================= 2 passed in 0.05s ==============================</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>How about other test scenarios? Python code coverage still has no clue we haven't tested a regular blood donor.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":4} --></p>
+<h4>Condition coverage</h4>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>While branch coverage nicely catches if we missed specific paths of execution, it's indifferent to specific conditions. You certainly remember that for example <code>or</code> is evaluated lazily - if an expression on the left side is true, then the one on the right side is not even evaluated.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># when is_pregnant is True, then the second part won't be executed!
+if patient.is_pregnant or patient.is_regular_blood_donor:
+    ...</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Condition coverage assumes that in order to achieve 100% code coverage, the test suite needs to check situations in which every expression is True and False. It means condition coverage will require us to:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>the patient is not pregnant nor a regular blood donor</li>
+<li>the patient is pregnant but not a regular blood donor</li>
+<li>the patient is both pregnant and a regular blood donor</li>
+<li>the patient is not pregnant but is a regular blood donor</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>A formula for this type of coverage could be <code>(number_of_executed_bool_states_of_operands / number_of_all_operands * 2) * 100%</code>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Unfortunately, there is no maintained tool in Python that will measure it for you. There was a lib called <a href="https://pypi.org/project/instrumental/">instrumental</a> but it seems it has been abandoned for years.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>On the other hand, we can resort to <a href="https://hypothesis.readthedocs.io/en/latest/">hypothesis</a> (property-based testing lib) to help us generate exhaustive use cases. This would be especially helpful for more of a black-box testing without looking into guts of tested function (white-box testing).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":4} --></p>
+<h4>Other types of coverage</h4>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Statement-, Branch- and Condition coverage are not all types of code coverage. If you are hungry for more, see several white papers linked at the end of the article.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Installation &amp; configuration</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>I am assuming you are using pytest.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now, if you're new to coverage and want to get your hands dirty you can get some coverage numbers fast if you:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li><code>pip install pytest-cov</code> (it depends on coverage.py so it will be installed as well)</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>Regarding configuration, we would certainly want to enable branch coverage. We can do this (+ few other options) using e.g. <code>setup.cfg</code>:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>&#91;coverage:run]
+branch = True
+omit = src/db/env.py,src/db/versions/*  # define paths to omit
+
+&#91;coverage:report]
+show_missing = True
+skip_covered = True</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Good practices</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>When to run pytest with code coverage enabled?</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:heading {"level":4} --></p>
+<h4>During build (Continous Integration)</h4>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Running tests with coverage should definitely happen during builds, e.g. on Jenkins, Travis or whatever tool you use. We should set some required threshold for coverage. When it's not met (code coverage less than expected) we fail the build, e.g. pytest --cov=src/ --cov-fail-under=100 tests/. In this example, the command will fail if our coverage is lower than 100%.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":4} --></p>
+<h4>Locally</h4>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Just like during Continous Integration, you can instrument pytest to run coverage plugin by manually appending appropriate parameters. The other option is to configure pytest to always collect coverage when it runs by using <code>addopts</code> configuration in e.g. <code>setup.cfg</code>:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>&#91;tool:pytest]
+addopts = --cov src/</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Personally, I advise against the second option. Why? Because collecting code coverage in Python is a considerate performance hit. If you (or anyone in your team) is using Test-First approach, then extra latency becomes an annoyance. Usually, I run small parts of the test suite when working locally in TDD cycle and then manually run the whole test suite at the end with code coverage enabled.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>How much code coverage is enough?</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>In theory the higher code coverage, the better. I think it makes no sense to set it at 80% or 90%. I think 100% is possible with a "BUT".</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>The stance on code coverage that my colleague <a href="https://lukeonpython.blog/">Łukasz</a> taught me is that one should start with 100% requirement and then exclude lines where it is not possible to achieve code coverage. It can be done using <code># pragma: no cover</code> comment. For example, coverage will complain about abstract base classes, which is obviously a nonsense:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class ApiFactory(abc.ABC):
+    @abc.abstractmethod
+    def foo_api(self) -&gt; FooApi:  # pragma: no cover
+        pass
+
+    @abc.abstractmethod
+    def bar_api(self) -&gt; BarApi:  # pragma: no cover
+        pass</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>There is also an option to set excluded lines in configuration of coverage.py but it's not ideal.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Of course, the rule of 100% test coverage must be loosened in codebases where code coverage wasn't measured before. Even then it makes sense to set the expectation high. Initially, we can also exclude parts of the code.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Is 100% code coverage an intolerable burden?</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Does a pursue for 100% code coverage mean writing tests for every function/class/module? <strong>No<sup>No</sup>.</strong> This is a widely held myth. If function A uses function B, then to cover both of them testing function A can be sufficient. That will largely depend on their implementation, but in general, our code is organized hierarchically, forming levels of abstraction. Then measuring code coverage is an immense help to quickly show us which parts we missed.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Testing each and every code block individually is unreasonable. It effectively makes code immutable and tests very fragile. We should be starting from higher-level tests, adding low-level ones when necessary (and code coverage will give you a great hint when you need it!). Also, be aware of <a href="https://breadcrumbscollector.tech/encapsulation-is-your-friend-also-in-python/">encapsulation</a> and not violating it during testing.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>When one wants to truly lean on their test suite, code coverage is an indispensable thing.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Although 100% code coverage may look like an unattainable goal, in my opinion, it is the only expectation that works. It really <em>clicks</em> when combined with TDD.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Further reading</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li><a href="https://publications.lib.chalmers.se/records/fulltext/217038/217038.pdf">Code coverage criteria and their effect on test suite qualities</a></li>
+<li><a href="https://coverage.readthedocs.io/">coverage.py</a></li>
+<li><a href="https://hypothesis.readthedocs.io/en/latest/">hypothesis</a></li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>

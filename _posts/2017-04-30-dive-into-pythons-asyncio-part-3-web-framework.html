@@ -1,0 +1,51 @@
+---
+layout: post
+title: Dive into Python's asyncio, part 3 - web framework
+date: 2017-04-30 20:49:00.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- asyncio
+- dajsiepoznac2017
+tags: []
+permalink: "/dive-into-pythons-asyncio-part-3-web-framework/"
+---
+<p>Few days ago while I was reading <a href="http://fullstackpython.com">fullstackpython.com</a> I came across new pythonic micro web framework based on asyncio - <a href="https://github.com/channelcat/sanic">Sanic</a>.</p>
+<p>Coolest thing about Sanic is that it leverages asyncio providing better performance and more efficient hardware utilization. Although it's not feature complete yet, there are people claimimg to be using it in production and handling few thousands requests per second without any problems.</p>
+<p>Due to asyncio's features, with Sanic we may easily implement websockets handling without need of setting up separate application just for that.</p>
+<pre class="lang:python decode:true">from sanic import Sanic
+from sanic.response import file
+
+app = Sanic(__name__)
+
+
+@app.route('/')
+async def index(request):
+    return await file('websocket.html')
+
+
+@app.websocket('/feed')
+async def feed(request, ws):
+    while True:
+        data = 'hello!'
+        print('Sending: ' + data)
+        await ws.send(data)
+        data = await ws.recv()
+        print('Received: ' + data)
+
+
+if __name__ == '__main__':
+app.run()</pre>
+<p>Another quality is a dependence on <a href="https://github.com/MagicStack/uvloop">uvloop</a> - drop-in replacement for asyncio's default event loop. In fact, it is a wrapper around libuv - the same event loop that powers node.js. According to uvloop's README.md, it makes asyncio 2-4 times faster.</p>
+<p>Last, but not least - Sanic's API is inspired by Flask. Therefore, one may found many similarities and start coding in no time.</p>
+<p>Before you get too excited, let's answer the most important question regarding new shiny toys. Under what circumstances Sanic is a better choice than Django, Flask or other Python web framework without asyncio under the hood?</p>
+<p>Well, if you need to request data from some external service using REST, by example, then your preforked web application (Django, Flask etc) is not able to process more requests than the number of workers it has. In a pessimistic scenario, when all requests to the external service timeout after 30 seconds and you have 8 workers in total, then 8 simultaneous requests to your application will paralyze it. With Sanic, you would still be able to serve clients, unless they are asking for the same blocked resource.</p>
+<h3>Further reading:</h3>
+<ul>
+<li><a href="https://github.com/channelcat/sanic/tree/master/examples">Sanic's examples</a></li>
+<li><a href="https://www.fullstackpython.com/sanic.html">fullstackpython on Sanic</a></li>
+</ul>
+<p>&nbsp;</p>

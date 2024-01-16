@@ -1,0 +1,175 @@
+---
+layout: post
+title: "@staticmethod considered a code smell"
+date: 2020-05-01 09:00:00.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- good practices
+- python
+- software engineering
+tags: []
+permalink: "/staticmethod-considered-a-code-smell/"
+---
+<p><!-- wp:paragraph --></p>
+<p>Python offers quite a few built-in decorators that can be used to give methods of classes certain superpowers. <code>@property</code> turning method into a read-only field-like attribute is a classic example. Or <code>@classmethod</code> - a method that receives a class as a first argument, not an instance.  Fun fact, this kind of method is usually called static method in other languages (e.g. Java, C#, C++ just to name a few).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Speaking of static methods, you may occasionally encounter methods decorated with <code>@staticmethod</code>. For instance, it often appears in codebases that are developed using PyCharm IDE because it encourages developers to change methods into static ones:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"align":"center","id":794,"sizeSlug":"large"} --></p>
+<div class="wp-block-image">
+<figure class="aligncenter size-large"><img src="{{ site.baseurl }}/assets/2020/05/Zrzut-ekranu-2020-04-30-o-21.37.23.png" alt="" class="wp-image-794" /></figure>
+</div>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>...but what are they?</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>What is @staticmethod?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>We know already that a static method in Python is a completely different creature than similarly named constructs in other languages. "normal" accepts <code>self</code> as a first argument (tied to instance), <code>@classmethod</code> accepts <code>cls</code> (class) and <code>staticmethod</code>... does not accept either. All can, of course, have additional arguments:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class Example:
+    default_multiplier = 3
+
+    def __init__(self, multiplier: int) -> None:
+        self._multiplier = multiplier
+
+    #  tied to instance
+    def normal_method(self, argument: int) -> int:
+        return self._multiplier * argument
+
+    @classmethod  # tied to class
+    def class_method(cls, argument: int) -> int:
+        return argument * cls.default_multiplier
+
+    @staticmethod  # tied... but to what?!
+    def static_method(argument: int) -> int:
+        return argument * 2
+
+# Calling from an instance
+# all method types can be called that way
+example = Example(multiplier=4)
+example.normal_method(1)  # 4
+example.class_method(1)  # 3
+example.static_method(1)  # 2
+
+# Calling from the class
+Example.normal_method(1)  # TypeError, need two arguments (self and argument)
+Example.class_method(1)  # 3
+Example.static_method(1)  # 2</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Although static method has no direct access to neither an instance nor class, it is still tied to the latter but in a bit more loose way - it is living in a class namespace.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>In simple words, it's like a normal function written outside but "attached" to a certain class. The only difference is that whenever someone needs to use it, has to do it via instance or class.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>From the static method point of view, it has no knowledge about encompassing class whatsoever. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>So why I am claiming <code>@staticmethods</code> are code smell?</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>What is a code smell?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>First, a word or two of clarification because the title might suggest static methods are bad and should be avoided. That's not the point. If I were to argue about that, I would use a word <em>antipattern</em>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:pullquote --></p>
+<figure class="wp-block-pullquote">
+<blockquote />
+<p>A code smell is a surface indication that usually corresponds to a deeper problem</p>
+<p><cite><a href="http://martinfowler.com/bliki/CodeSmell.html">http://martinfowler.com/bliki/CodeSmell.html</a></cite></figure>
+<p><!-- /wp:pullquote --></p>
+<p><!-- wp:paragraph --></p>
+<p>For those who are not familiar with the term, such a definition may still be worrying a bit. After all, if my code ? smells ? I should do something about it, right? <strong>Not necessarily.</strong> Identifying a code smell is often more of an opportunity than danger.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>But why it's even worth writing an article? <code>@staticmethod</code> may indicate low cohesion of a class it belongs to.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>What is cohesion?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>In the shortest words, cohesion stands for how strong is the relationship between class attributes. A class consists of fields and methods. The more methods use fields, the higher the cohesion. The maximum cohesion is when all methods use all class fields (unrealistic, but that's theory ;)) If only one or two methods use a certain subset of fields, then cohesion is respectively lower. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>In general, high cohesion is desirable. It means that class is focused on what it is doing. Bear in mind cohesion remains an abstract term and there is no reason to try to deliberately maximize for it. Still, when you face a code challenge or wonder how to refactor, cohesion (or lack of such) may give you invaluable hints.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>What does it have to do with Python static methods?</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Since static methods are, by their very definition, not using class or instance fields. Hence, they ALWAYS lower cohesion of a class. Now that we know high cohesion is desirable, should you refactor them immediately...?</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><strong>No.</strong></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:quote --></p>
+<blockquote class="wp-block-quote"><p>(...) practicality beats purity</p>
+<p><cite>Zen of Python</cite></p></blockquote>
+<p><!-- /wp:quote --></p>
+<p><!-- wp:paragraph --></p>
+<p>Even though a static method is not operating on class/instance data, it is still (hopefully) there for a reason. Most probably, it's a kind of auxiliary function that's used by other, "normal" methods.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>So if it's not a big deal when <code>@staticmethods</code> exist in your code, why should you even care? </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Opportunity, not a danger</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>In a paragraph about code smells I mentioned they are more an opportunity than a danger. Further explaining that, code smells indicate an opportunity for a refactoring. Naturally, refactoring for art's sake is nothing but a waste (unless you treat it as an exercise to practice your craft). </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>However, when there is a good reason to refactor, <code>@staticmethods</code> are probably one of the lowest hanging fruits over there. They are literally screaming <em>Hey! You can take me out if you need to make this class smaller!</em></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>That's one specific example of applying cohesion-based criterion to guide your refactoring. Other, idealised situation is when you can clearly identify two separate subsets of fields and methods that operate on these subsets.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class SplitPersonalityClass:
+    def __init__(self, field_a: list, field_b: int) -> None:
+        self._field_a = field_a
+        self._field_b = field_b
+        
+    def add_to_a(self, arg: int) -> None:
+        if len(self._field_a) > 10:
+            raise ValueError
+        self._field_a.append()
+        
+    def get_from_a(self) -> int:
+        return self._field_a.pop()
+    
+    def multiply(self, arg: int) -> int:
+        return self._field_b * arg</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>In this example, <code>SplitPersonalityClass</code> has two fields - <code>field_a</code> and <code>field_b</code>. The former is used only by first two methods while the latter is used exclusively in the last method. This class could be split into two separate classes. Of course, if there is no other reason for them to remain one (see other types of cohesion from Further Reading section).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Although <code>@staticmethod</code> smells a bit, it's often no big deal. However, when facing a need for refactoring a class, they're a perfect candidate to move them out ;)</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><strong>Further reading</strong></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li><a href="https://vanderburg.org/blog/2011/01/31/cohesion.html">https://vanderburg.org/blog/2011/01/31/cohesion.html</a></li>
+<li><a href="https://www.avatto.com/study-material/software-engineering-cohesion">https://www.avatto.com/study-material/software-engineering-cohesion</a></li>
+<li><a href="https://github.com/mschwager/cohesion">https://github.com/mschwager/cohesion</a></li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>

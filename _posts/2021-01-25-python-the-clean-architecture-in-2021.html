@@ -1,0 +1,410 @@
+---
+layout: post
+title: Python & the Clean Architecture in 2021
+date: 2021-01-25 21:16:00.000000000 +01:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- clean architecture
+- domain-driven design
+- python
+tags: []
+permalink: "/python-the-clean-architecture-in-2021/"
+---
+<p><!-- wp:paragraph --></p>
+<p>It's been almost 3 years since I used the Clean Architecture in production for the first time. I made it to quite a few conferences to talk about it (e.g. see <a href="https://www.youtube.com/watch?v=18IqltQ4XE4">Clean Architecture in Python</a> talk from PyGotham 2018). Also, I wrote an article about <a href="https://breadcrumbscollector.tech/the-clean-architecture-in-python-how-to-write-testable-and-flexible-code/">the Clean Architecture</a> that made it to RealPython.com newsletter. ...but we're now in 2021 and the world has gone forward. Let's see how Python's advancement and a variety of new cool libraries make the implementation of the Clean Architecture easier today.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>First, let's revisit why's.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Assumptions - good old friends</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Independence from a framework</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The goal here is to avoid leaks of framework-specific stuff to the business logic. If the latter is complex on its own, framework's stuff will make that worse. The goal was never to abstract away the framework for art's sake, but rather to keep the flow of control unidirectional. Swapping frameworks ALMOST never happens. Just don't let it get too intimate with business details.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Testability</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The idea is to be able to test the most valuable pieces without too much effort. Our tests can be simpler to write, faster and cheaper to maintain.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Independence from UI/API</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The most critical observation to make - your program is not just some Django/Flask/FastAPI/Starlette etc app. It's a non-material thing that provides a certain set of services for group or groups of users. Accidentally, it has an API on top of it. The more complex the underlying set of services is, the more sense it makes.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Independence from third party services</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>We use abstract classes (<em>Ports</em>) to write code with business logic against stable interfaces that wrap third parties. Not only because switching payment provider is a likely scenario, but also to keep business logic simpler and pure. That also helps with writing stubs for the external stuff we do not control while testing the system.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Assumptions - few new ones</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Modularization is more critical than the Clean Architecture</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The Clean Architecture is quite a huge investment. And sometimes juice is not worth the squeeze - especially if a certain part of the system is:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>trivial proxy over some 3rd party service</li>
+<li>simple, CRUD application</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>Using too simplistic or too complex approach throughout entire system is not gonna work well. We need to learn ways to identify different components of the app, then carefully craft. Of course, I do not mean Big Design Up Front. Be ready to refactor out parts of the app gradually into separate components as your understanding of the system grows.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Here you can find an article about <a href="https://breadcrumbscollector.tech/modular-monolith-in-python/">building a modular monolith in Python</a> and don't put all your eggs in one basket</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Independence from databases</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Although the Clean Architecture/Hexagonal architecture/Onion architecture etc are often combined with a Repository Pattern, we should not expect database switch to be trivial. The goal is to make sure your business logic shape persistence (e.g. database models), not the other way around. For MongoDB, it's quite easy to achieve with <a href="https://pydantic-docs.helpmanual.io/">Pydantic</a> (or built-in dataclasses + <a href="https://pypi.org/project/marshmallow-dataclass/">marshmallow-dataclasses</a>). It's not that simple though for relational databases. It still means a lot of work to make our domain objects not being represented by database models. From my perspective, SQLAlchemy remains a powerful (often enough) tool.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Bear in mind, that it all becomes much more tricky when multiple databases are involved. Also, transaction management is a cross-cutting concern that's not trivial to be abstracted away. I devoted quite a few pages in my <a href="https://leanpub.com/implementing-the-clean-architecture">book</a> for this particular topic.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Direct access to the database is sometimes handful and harmless</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Speaking of databases... When we model operations that modify data in the system and it's complicated due to the nature of the system and requirements, all those fancy layers doesn't come into way. BUT if we think about reading data, it becomes a burden - not only from typing perspective, but also there's considerable performance hit when we're repacking objects.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>So it's totally fine for read endpoints to have a shortcut to reach directly to the database. However, exposing your database schema directly may not be the best idea in the long run. Consider using a view over your tables or another way to guarantee you a way out (e.g. views in RDBMS, proxy models in Django etc)</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>The Clean Architecture is not "all-in" approach</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>I think that the success of my talk can be partially attributed to the way how the narration was built - introducing building blocks one after another. I even got positive feedback from non-technical people that the talk sounded interesting to them. The point I am trying to make is that you can introduce elements of the Clean Architecture gradually - in the same order as they appear in the talk. Let's be honest - systems are not being built like in books or talks. In reality, it's a bumpy road with many mistakes along the way and refactorings. Also, a part that's often conveniently passed over in silence is learning the rules of the game of business we work with.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>What was painful in implementing the Clean Architecture in Python in 2018 and is no longer a big deal?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Validation</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The biggest issue I found was with validation. Now, thanks to aforementioned Pydantic / dataclasses+marshmallow-dataclasses + mypy it is not nearly as bad. Additionally, arm yourself with a Value Object pattern and you are good to go into 2021 and beyond.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Overengineering</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Discovering the possibility of modularization and adopting the Clean Architecture gradually makes it much less of a risk. Still, do your homework - I recommend to learn about strategic Domain-Driven Design and techniques like Event Storming to better estimate when it makes sense to invest more.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Non-idiomatic framework usage</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Although Django philosophy hasn't changed a lot since 2018, we have now a few new trending (micro)frameworks - like Starlette or FastAPI. They are as flexible as Flask but more powerful and modern. Still, use them with caution!</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:html --></p>
+<blockquote class="twitter-tweet"><p dir="ltr" lang="en">I wonder if there's a way to use FastAPI's dependency injection outside views. If not, it undermines its usefulness since API is merely one of the possible entry points to the application</p>
+<p>— Sebastian Buczyński (@EnforcerPL) <a href="https://twitter.com/EnforcerPL/status/1339642015559135232?ref_src=twsrc%5Etfw">December 17, 2020</a></p></blockquote>
+<p> <script async="" src="https://platform.twitter.com/widgets.js" charset="utf-8"></script><br />
+<!-- /wp:html --></p>
+<p><!-- wp:paragraph --></p>
+<p>For example, our dependency injection container should be universal enough so we can use it in any context (console application, task queue AND API).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Enough talking - show me the code!</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Use Cases / Interactors</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The first step is to identify and introduce <em>Use Cases</em> (AKA <em>Interactors</em>). There will be one for each individual action/command of an actor. An actor is a person or another system that interacts with our application. Typically, it will be a regular user.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>For a meetup.com clone, it could be:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>Confirming attendance as an attendee</li>
+<li>Cancelling attendance as an attendee</li>
+<li>Drafting new meeting as an organizer</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>For a Trello clone, it could be:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>Assigning a task to a team member</li>
+<li>Archiving list</li>
+<li>Inviting a colleague with their e-mail address</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>For an auctioning platform, we could identify following <em>Use Cases</em>:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>Placing a bid as a bidder</li>
+<li>Withdrawing a bid as an administrator</li>
+<li>Cancelling auction as an item owner</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now that we have a basic understanding of what users can do with the system, we can represent these actions as first-class citizens in code:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class PlacingBid:
+    def __call__(self) -&gt; None:
+        ...
+
+class WithdrawingBid:
+    def __call__(self) -&gt; None:
+        ...
+
+class CancellingAuction:
+    def __call__(self) -&gt; None:
+        ...</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Use Cases / Interactors will inherently have semantics of a function - they are to be called in an api view / cli command / background task. If so, why not just use a function? Because dependency injection is not quite possible with functions. Also, with classes we can easily control lifetime of objects.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Input DTOs (arguments of Use Cases)</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Most Use Cases will require a bunch of arguments, e.g. identity of a user that triggered the action, which resource they wish to modifyt etc. We pack those into immutable data structures using classes. An immutable <code>@dataclass(frozen=True)</code> would do, but Pydantic can do as nice:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from decimal import Decimal
+from pydantic import BaseModel, validator
+
+
+class PlacingBidInputDto(BaseModel):
+    auction_id: int
+    bidder_id: int
+    amount: Decimal
+
+    @validator("amount")
+    def amount_must_be_positive(cls, v) -> None:
+        if v &lt;= Decimal("0"):
+            raise ValueError("Amount must be positive")
+        return v
+
+    class Config:
+        allow_mutation = False
+
+
+class PlacingBid:
+    def __call__(self, dto: PlacingBidInputDto) -> None:
+        ...</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>InputDTOs should be validated. Whether they do it on their own (pydantic) or using another object (marshmallow-dataclasses) inside Use Cases we should have every right to expect that arguments are valid in terms of type. We'll never know if an auction with a given ID exists before calling <em>Use Case</em>, but we must ensure IDs are at least looking as they can belong to an existing object.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Value Objects</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>In the above example, you can see that I used built-in types for things like <code>auction_id</code> or <code>bidder_id</code> and <code>amount</code>. This is a code smell called <a href="https://refactoring.guru/pl/smells/primitive-obsession">Primitive Obsession</a>. Especially for the <code>amount</code> field - instead of playing with Decimal, it would be better if we created (or used) a dedicated Money type which would guarantee to be valid and immutable. This is a pattern called Value Object and is present in Python's standard library. <code>datetime.datetime</code>, <code>uuid.UUID</code> or <code>decimal.Decimal</code> are examples.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Interfaces / Ports</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Whenever we need to call a 3rd party API (or another component of our modular monolith) in a synchronous way, we're gonna find it useful to wrap it for two reasons:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>prevent pollution of our business logic with irrelevant details and names from the outside</li>
+<li>improve testability - having abstraction in place allows for easier mocking/stubbing. If we do TDD, it also allows to nicely design collaboration by leveraging mocks</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>Under the hood, dragons may live. But when you look at <em>Use Case</em> and how it uses <em>Interface</em> / <em>Port</em>, it should look nice and easy to you!</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>In 2021, for the most of the time abstract base class (<code>abc.ABC</code>) will be a way to go:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>import abc
+
+
+class Payments(abc.ABC):
+    @abc.abstractmethod
+    def init_payment(
+        self, bidder_id: int, amount: Money
+    ) -&gt; None:
+        pass
+
+
+class ClosingAuction:
+    def __init__(self, payments: Payments) -&gt; None:
+        self._payments = payments
+
+    def __call__(self, dto: ClosingAuctionInputDto) -&gt; None:
+        self._payments.init_payment(
+            bidder_id=auction.winner_id,
+            amount=auction.price,
+        )</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Bear in mind that not only a list of public methods is your <em>Port.</em> If there are any exceptions that you want to handle explicitly in <em>Use Case</em>, they should be defined alongside <em>Port</em> and repacked in the next building block when necessary.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Interface Adapter / Adapter</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Each abstract class will have at least one implementation + stubs/mocks modelled after it. <em>Adapter</em> is just an implementation of a <em>Port</em>:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class MadeUpCompanyPayments(Payments):
+    def init_payment(
+        self, bidder_id: int, amount: Money
+    ) -&gt; None:
+        # pull corresponding customer id for a given bidder id
+        # customer id is an identifier in external system
+        # we do not want to leak to auctioning platform
+        ...
+        # Then, we can try to charge customer with requested amount OR
+        # request them to pay online
+
+
+closing_auction = ClosingAuction(MadeUpCompanyPayments())</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Remember that Use Case class must not know which implementation of <code>Payments</code> it uses - hence the type annotation for abstraction.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Dependency Injection </h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>I hope the last line caught your eye - <code>ClosingAuction(MadeUpCompanyPayments())</code> - assembling objects manually is not much of a fun. To make this painless, we can use <a href="https://pypi.org/project/injector/">injector</a> - nice library modelled after Java's Guice. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>import injector
+
+
+class Auctions(injector.Module):
+    @injector.provider
+    def closing_auction(self, payments: Payments) -&gt; ClosingAuction:
+        return ClosingAuction(payments)
+
+
+class AuctionsInfrastructure(injector.Module):
+    @injector.provider
+    def payments(self) -&gt; Payments:
+        return MadeUpCompanyPayments()
+
+
+container = injector.Injector(&#91;Auctions(), AuctionsInfrastructure()])
+# in a view / CLI command / background task
+closing_auction = container.get(ClosingAuction)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>All you have to do is to define recipes for all dependencies and injector will assemble them for you.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>In the past, I used <code>inject</code> library. The largest con is that it relies on a global state which makes you wanna cry during testing.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Bear in mind you should rather not use <code>container</code> directly. This can lead to Service Locator antipattern. There are packages on pypi that <a href="https://github.com/alecthomas/flask_injector">integrate flask_injector</a>. If there's none available for the framework you use, try to write your own integration and don't hesitate to share with the community :)</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Another sensible alternative to injector is <a href="https://pypi.org/project/dependencies/">dependencies</a>. I haven't used it, but it looks rock-solid. BTW, pytest's fixture system is one large dependency injection container.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Entities</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>While <em>Use Cases</em> orchestrate control flow, collaborating with <em>Interfaces</em> AKA <em>Ports</em>, we still need domain objects - the ones that will represent concepts we can talk about with stakeholders or users. In the case of auctioning platform, we'll have <code>Auction</code> and <code>Bid</code> classes.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now, "all-in" approach would be to write pure- or almost-pure Python classes:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>@dataclass
+class Bid:
+    _id: int
+    _bidder_id: int
+    _amount: Money
+
+
+@dataclass
+class Auction:
+    _id: int
+    _initial_price: Money
+    _bids: List&#91;Bid]
+
+    def place_bid(self, bidder_id: int, amount: Money) -&gt; None:
+        ...</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Note that all fields are <em>private.</em> We focus on <em>Entities'</em> behaviour (methods!) when we model them, not data that is going to be shown to the user. If encapsulation doesn't sound familiar to you, read <a href="https://breadcrumbscollector.tech/encapsulation-is-your-friend-also-in-python/">my article</a> about it. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now, we need a way to store and load <em>Entities</em> from the persistence mechanism (whichever it is - PostgreSQL/MongoDB - shouldn't matter). Popular way (the one I was also using) is to use Persistence-Oriented Repository Pattern:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class AuctionsRepository(abc.ABC):
+    @abc.abstractmethod
+    def get(self, auction_id: int) -&gt; Auction:
+        ...
+
+    @abc.abstractmethod
+    def save(self, auction: Auction) -&gt; None:
+        ...</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>We use it in the same way as <em>Ports</em> - they are collaborators for <em>Use Cases</em>. Concrete repositories will have to repack data from <em>Entities</em> to:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>models with SQLAlchemy and flush changes</li>
+<li>dictionaries for e.g. pymongo and save it</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>As you can imagine, implementing concrete repositories could be quite tedious job. It starts to make more sense if you use Tactical Domain-Driven Design patterns and model Aggregates as small, self-contained pieces around business invariants that always have to be consistent. This is the case for <code>Auction</code> - it has to be consistent with its <code>Bids</code>. Also, we can notice that for some <em>Use Cases</em> we might need to load all <code>Bids</code> (withdrawing bid) while for others (placing bid) only a subset (i.e. winning) Bids are necessary to perform the logic. <em>Repository Pattern</em> helps to manage and contain these intricacies.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>BUT what if your domain objects are simpler? Why not just use database models as domain objects? Previously, I was against such abominations. But in one of my projects Entities were simple. Although <em>Use Cases</em> and <em>Ports</em> / <em>Adapters</em> made perfect sense, investment into Entities and Repositories didn't pay off as much. I feel SQLAlchemy's implementation of <em>Unit Of Work pattern</em> (Session) would do fine with hiding technical details.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now, I don't encourage you to throw The Dependency Rule away and write SQL in your <em>Use Cases</em>, but consider if the lightweight approach wouldn't work for you. It would be best if you read about Aggregates and Tactical Domain-Driven Design to see if you need that. I recommend Vaugh Vernon's Domain-Driven Design Distilled book for a quick and solid introduction.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>The most important thing is to not let structure (fields) of our domain objects leak outside <em>Use Cases</em> - this is what makes systems hard to change.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Conclusion</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>I'm still a big fan of the Clean Architecture or similar approaches. By the way, it takes some time to understand why it works. Studying principles of Object-Oriented Programming really helps with that. Even though sometimes a function is all we need, knowledge about design always helps.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>I am really glad that Python's community is building a lot of awesome tools to make it easier to build enterprise-grade software in Python. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>How about you? What new additions to Python's ecosystem you find the most valuable for implementing the Clean Architecture?</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Further reading</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li><a href="https://autofaccn.readthedocs.io/en/latest/best-practices/">Best practices for Dependency Injection</a></li>
+<li><a href="https://leanpub.com/implementing-the-clean-architecture">Implementing the Clean Architecture book</a></li>
+<li><a href="https://breadcrumbscollector.tech/the-clean-architecture-in-python-how-to-write-testable-and-flexible-code/">Original blog post</a> - read about The Dependency Rule and Boundaries there</li>
+</ul>
+<p><!-- /wp:list --></p>

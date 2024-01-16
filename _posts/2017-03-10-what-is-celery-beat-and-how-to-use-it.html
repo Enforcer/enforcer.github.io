@@ -1,0 +1,123 @@
+---
+layout: post
+title: What is celery beat and how to use it?
+date: 2017-03-10 22:09:44.000000000 +01:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- dajsiepoznac2017
+- python
+tags: []
+permalink: "/what-is-celery-beat-and-how-to-use-it/"
+---
+<p><img class="aligncenter wp-image-49" src="{{ site.baseurl }}/assets/2017/03/celery_512.png" alt="" width="256" height="256" /></p>
+<p><a href="http://celeryproject.org">Celery</a> is a widely recognized distributed task queue for pythonic projects. Its sole purpose is to reduce load of web servers by delegating time-consuming tasks to separate processes. Our web servers should handle one request for no longer than a fraction of second, therefore running long tasks synchronously substantially reduces application's throughput.</p>
+<p>So we are able to delegate and queue hard work elsewhere. Obviously, this has to be done explicitly. Sometimes we have to run some tasks periodically.  Let's say we have a business requirement:</p>
+<blockquote><p>Users pay for access to our service. Payment can be done only for one month. Doing so postpones account's expiration by 31 days. Expired accounts should be deactivated within 4 hours. Eventually e-mail with apropriate information should be send.</p></blockquote>
+<p>To fulfill such requirement, we would have to scan application's user list for expired accounts at least every 4 hours. That is where <strong>celery beat</strong> comes in. Its simply a celery periodic tasks scheduler.</p>
+<h2>Why should I use celery beat? I have crontab</h2>
+<p>That's a strong argument against <strong>celery beat</strong>. After all, why would anyone care about some less-known solution that is meant to replace battle-tested <a href="https://linux.die.net/man/8/crond">crond service</a> present in all modern unix distros? However, using crontab requires additional knowledge and usually root access on server. AFAIK, there is no such widespread service in Windows .</p>
+<h3>Portability</h3>
+<p>First argument in favour of <strong>celery beat</strong> is its portability. Every environment that can run Python will be also sufficient for <strong>celery beat</strong>. Taking development and test environments into consideration, this is a serious advantage. Celery beat is just another part of your application, so new version could be easily deployed locally every time codebase changes. This speeds up whole process and makes one headache go away.</p>
+<h3>No more "glue" scripts</h3>
+<p>Using <strong>celery beat</strong> eliminates need for writing little glue scripts with one purpose - run some checks, then eventually sending tasks to regular celery worker. Usually these would be run periodically by crond, therefore crond configuration would effectively tie application to certain run environment.</p>
+<h3>It is in Python!</h3>
+<p>An obvious advantage. No administration skills required to have full-fledged periodic tasks scheduler :)</p>
+<h2>How to properly use celery beat in aforementioned scenario?</h2>
+<p>Let's break our problem into smaller ones first. We have to:</p>
+<ul>
+<li>Scan user's list, looking for expired accounts</li>
+<li>For every expired account:
+<ul>
+<li>deactivate it</li>
+<li>send an e-mail</li>
+</ul>
+</li>
+</ul>
+<p>We know for sure, that first thing should be done periodically, so we'll be running it directly from celery beat:</p>
+<pre class="lang:python decode:true">from celery import Celery
+
+app = Celery('tasks', broker='redis://redis:6379/0')
+
+@app.on_after_configure.connect
+def setup_periodic_tasks(sender, **kwargs):
+    sender.add_periodic_task(3600 * 4, scan_for_expired_users.s(), name='scan for expired accounts every 4 hours')
+
+@app.task
+def scan_for_expired_users():
+    """
+    TODO
+    """
+    pass</pre>
+<p>1:0 for scheduler.  We might implement whole thing in this task, but this approach is strongly discouraged.  First of all, resultant list of accounts can be large. Therefore, deactivating all accounts and sending e-mails would take very long time. Furthermore, failure in processing one account will affect the whole thing.</p>
+<p>Fortunately, we can easily trigger new tasks inside others using apply_async:</p>
+<pre class="lang:python decode:true">from celery import Celery
+
+app = Celery('tasks', broker='redis://redis:6379/0')
+
+@app.on_after_configure.connect
+def setup_periodic_tasks(sender, **kwargs):
+    sender.add_periodic_task(3600 * 4, scan_for_expired_users.s(), name='scan for expired accounts every 4 hours')
+
+@app.task
+def scan_for_expired_users():
+    """
+    TODO
+    """
+    for user in expired_users:
+        deactivate_account_and_send_email.apply_async((user, ))
+
+@app.task
+def deactivate_account_and_send_email(user):
+    # do some stuff
+    pass
+</pre>
+<p>We could stop here, but <em>deactivate_account_and_send_email</em>  still can be split into two smaller tasks. However, we can't just fire both using apply_async because they would run independently and we could end up with sending email of expiration to account that wasn't deactivated due to some failure :)</p>
+<p>So we need to link these tasks together somehow. Fortunately, Celery has appropriate mechanism called chains. Chained tasks will be executed sequentially. What is more, next task will get result from previous one as first argument.</p>
+<p>Working example:</p>
+<pre class="lang:default decode:true">from celery import Celery, chain
+
+
+app = Celery('tasks', broker='redis://redis:6379/0')
+
+
+@app.on_after_configure.connect
+def setup_periodic_tasks(sender, **kwargs):
+    sender.add_periodic_task(10, scan_for_expired_users.s(), name='scan for expired accounts every 4 hours')
+
+
+@app.task
+def scan_for_expired_users():
+    for user in get_expired_users():
+        deactivating_process = chain(deactivate_account.s(user), send_expiration_email.s())
+        deactivating_process()
+
+
+@app.task
+def deactivate_account(user):
+    # do some stuff
+    print(f'deactivating account: {user}')
+    return user + '_deactivated'
+
+
+@app.task
+def send_expiration_email(user):
+    # do some other stuff
+    print(f'sending expiration email to: {user}')
+    return True
+
+
+def get_expired_users():
+    return (f'user_{i}' for i in range(5))</pre>
+<p>Whole magic takes place in line 15. chain is created (note absence of explicit argument send_expiration_email! Result of previous task in chain will be passed). Then, in line 16. chain is scheduled to run asynchronously.</p>
+<h2>Summary</h2>
+<p>Celery once again proves to be powerful tool. Celery beat is a great addition to passive celery worker and saves programmers from learning crond.</p>
+<h2>Further info:</h2>
+<ul>
+<li><a href="http://docs.celeryproject.org/en/latest/userguide/periodic-tasks.html">celery beat manual</a></li>
+<li><a href="http://docs.celeryproject.org/en/latest/userguide/canvas.html">designing tasks workflows</a></li>
+<li>working example, ready to use with docker-compose <a href="http://github.com/Enforcer/celery-beat-example">http://github.com/Enforcer/celery-beat-example</a></li>
+</ul>

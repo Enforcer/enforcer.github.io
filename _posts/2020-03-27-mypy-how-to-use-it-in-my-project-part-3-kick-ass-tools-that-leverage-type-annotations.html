@@ -1,0 +1,161 @@
+---
+layout: post
+title: 'mypy: how to use it in my project? Part 3: kick-ass tools that leverage type
+  annotations'
+date: 2020-03-27 14:00:00.000000000 +01:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- mypy
+- python
+- type annotations
+tags: []
+permalink: "/mypy-how-to-use-it-in-my-project-part-3-kick-ass-tools-that-leverage-type-annotations/"
+---
+<p><!-- wp:paragraph --></p>
+<p>Type annotations are a formalized way to add some extra information about types to your project. Once you get through <a href="https://breadcrumbscollector.tech/mypy-how-to-use-it-in-my-project/">adding mypy to your project</a> and annotate your code (<a href="https://breadcrumbscollector.tech/mypy-how-to-use-it-in-my-project-part-2-automatically-annotate-code/">remember you can do it automatically</a>, at least to some extent) you will find yourself at the ocean of possibilities. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>This post will show the most impressive libraries that leverage type hints that I know.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Type checkers</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>If you have read previous articles in the series you know by now that official tool for validating types in python is called <a href="http://mypy-lang.org/">mypy</a>. But have you heard there are alternatives? </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>First of them is <a href="https://pyre-check.org/">pyre</a> - a tool that was originally developed by Facebook. Unlike Python-based mypy, it is written in OCaml. pyre is not meant to replace mypy as such. It is rather to be used as a part of Facebook ecosystem. Similar to other projects built in the past for Hack/PHP, it is an extendable "framework" to build more static-code analysis tools atop it. Thanks to being written in another language, it is expected to be faster than mypy. For more details, check <a href="https://news.ycombinator.com/item?id=17048682">this answer on Hackernews</a> and Pycon 2018 talk <a href="https://www.youtube.com/watch?v=hWV8t494N88">Types, Deeper static analysis and you by Pieter Hooimejier</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Another tool, this time coming from Microsoft, is <a href="https://github.com/microsoft/pyright">pyright</a>. It is written in TypeScript hence requires node js to work. It does not seem to provide any extra features compared to mypy though certainly there are differences in the way how both tools work. Here's a <a href="https://github.com/microsoft/pyright/blob/master/docs/internals.md">documentation page on how the internals of pyright work</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Classes without boilerplate - dataclasses &amp; attrs</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>A very dull part of defining stateful classes is writing their <em>__init__</em> method that will initialize the instance.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class User:
+    def __init__(self, id: int, first_name: str, last_name: str) -> None:
+        self.id = id
+        self.first_name = first_name
+        self.last_name = last_name</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>A recognized Python library that relieves us from that boring task is <a href="https://www.attrs.org/en/stable/">attrs</a>:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>import attr
+
+@attr.s(auto_attribs=True)
+class User:
+    id: int
+    first_name: str
+    last_name: str</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>attrs is very flexible and easy to work with. It does not provide any validation out of the box but makes it easy to build our own. Check out its documentation for full details. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>A poor man's replacement for attrs is dataclasses module, bundled with Python standard library since Python 3.7. There are available backports for older versions. It provides very limited functionality compared to attrs, though it has everything that is needed for simple use cases:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from dataclasses import dataclass
+
+@dataclass
+class User:
+    id: int
+    first_name: str
+    last_name: str</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Data modelling &amp; validation - pydantic</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:quote --></p>
+<blockquote class="wp-block-quote"><p>Data validation and settings management using python type annotations.</p>
+</blockquote>
+<p><!-- /wp:quote --></p>
+<p><!-- wp:paragraph --></p>
+<p><a href="https://pydantic-docs.helpmanual.io/">Pydantic</a> enables us to model our data in a nice, declarative way using just type annotations. In return, it will convert and validate data for us. Let's look at a slightly modified example from its documentation:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from datetime import datetime
+from typing import List
+from pydantic import BaseModel
+
+class User(BaseModel):
+    id: int
+    name = 'John Doe'
+    signup_ts: datetime = None
+    friends: List[int] = []
+
+external_data = {
+    'id': '123',
+    'signup_ts': '2019-06-01 12:22',
+    'friends': [1, 2, '3']
+}
+user = User(**external_data)
+print(user)
+# User(id=123, signup_ts=datetime.datetime(2019, 6, 1, 12, 22), friends=[1, 2, 3], name='John Doe')
+# {'id': 123, 'signup_ts': datetime.datetime(2019, 6, 1, 12, 22), 'friends': [1, 2, 3], 'name': 'John Doe'}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Pydantic is extensively used by <a href="https://github.com/tiangolo/fastapi">FastAPI</a> framework. It looks like a modern replacement for other serialization/deserialization libraries for web, like marshmallow or colander.  </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Dependency injection with python-injector</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p><a href="https://github.com/alecthomas/injector">Injector</a> is Guice-inspired dependency injection library. Simply saying, it is able to construct complex object graphs (resolve dependencies). For example, let's say we need class <em>PlacingBidUseCase</em> which is defined as follows:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class PlacingBidUseCase:
+    def __init__(
+        self, output_boundary: PlacingBidOutputBoundary, auctions_repo: AuctionsRepository) -> None:
+        self.output_boundary = output_boundary
+        self.auctions_repo = auctions_repo</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>By looking at its <em>__init__</em> we see it requires an instance of <em>PlacingBidOutputBoundary</em> and <em>AuctionsRepository</em>. Building them manually each time we need an instance of PlacingBidUseCase would be impractical, so we configure python-injector and just ask it to give us <em>PlacingBidUseCase</em> class.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>The library has nice integration with Flask, called simply <a href="https://pypi.org/project/Flask-Injector/">flask-injector.</a></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>It is extremely helpful for Python projects that use <a href="https://breadcrumbscollector.tech/the-clean-architecture-in-python-how-to-write-testable-and-flexible-code/">the Clean Architecture</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Types validation in runtime</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Last but not least - there is a whole class of libraries that provide a run-time validation of types.  For the sake of example, I will show just one of them - <a href="https://github.com/agronholm/typeguard">typeguard</a>. In the simplest form, one can use typechecked decorator to verify arguments and return types:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from typeguard import typechecked
+
+@typechecked
+def is_a_bigger_than_b(a: int, b: int) -> bool:
+    return a > b
+
+is_a_bigger_than_b('a', 'b')
+Traceback (most recent call last):
+  ...
+TypeError: type of argument "a" must be int; got str instead</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Bear in mind such checks can be very expensive. Unlike statically-typed languages, Python will not validate types before run-time which means calling <em>isinstance</em> builtin function. These tools should not be recklessly applied everywhere in the project. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Further reading</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>There is a Github repository <a href="https://github.com/typeddjango/awesome-python-typing">awesome-python-typing</a> that is meant to list all awesome tools built upon type hints. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>What about you? Are you using any other cool tool built atop type annotations? If so, share it in comments :)</p>
+<p><!-- /wp:paragraph --></p>

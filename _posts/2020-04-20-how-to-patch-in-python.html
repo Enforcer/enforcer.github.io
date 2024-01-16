@@ -1,0 +1,251 @@
+---
+layout: post
+title: How to patch in Python?
+date: 2020-04-20 09:00:00.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- python
+- python idioms
+- testing software
+tags: []
+permalink: "/how-to-patch-in-python/"
+---
+<p><!-- wp:heading --></p>
+<h2>What is (monkey-)patching in Python?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>(monkey-) patching is a technique for changing code behaviour without altering its source. It is done in runtime, usually by overriding attributes of existing objects. An object can be an instance of some sort, a class or even a module. The technique is most commonly (ab)used for tests when we cannot pass mocks in a simple way. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># by default, it will create a new instance of Mock and put it in place of on_commit
+@patch("django.db.transaction.on_commit")
+def test_booking_flight__successful_boking__schedueles_notification_after_commit(on_commit_mock):
+    code_that_imports_on_commit_from_djang_db_etc()
+
+    on_commit_mock.assert_called_once_with(...)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Another impressive example is <a href="https://www.gevent.org/">gevent library</a> that turns synchronous code into asynchronous by using monkey-patching.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># the first thing to do is to call monkey.patch_all()
+# to turn code into asynchronous one
+from gevent import monkey; monkey.patch_all()
+import time
+
+import requests
+from gevent.pywsgi import WSGIServer
+
+
+def application(env, start_response):
+    start = time.time()
+    # we use requests (which is not asyncio-friendly!) 
+    # to check how much time it takes example.com to respond
+    response = requests.get('http://example.com/')
+    end = time.time()
+    if not response.ok:
+        start_response('500 Internal Server Errord', &#91;('Content-Type', 'text/html')])
+        return &#91;b'Something is wrong with the site!']
+
+    start_response('200 OK', &#91;('Content-Type', 'text/html')])
+    return &#91;f"Server took {end - start}s to respond".encode()]
+
+
+if __name__ == '__main__':
+    WSGIServer(('127.0.0.1', 8080), application).serve_forever()</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Let's benchmark it using wrk:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>wrk -c 20 -t 5 -d 5s --timeout 5s http://localhost:8080
+# requests to example.com takes on average in ~0.25s
+
+# without gevent.patch_all
+Running 5s test @ http://localhost:8080
+  5 threads and 20 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency     1.90s     1.59s    4.83s    47.37%
+    Req/Sec     2.11      1.52     4.00     57.89%
+  19 requests in 5.06s, 2.79KB read
+Requests/sec:      3.76
+Transfer/sec:     565.48B
+
+# with gevent.patch_all
+Running 5s test @ http://localhost:8080
+  5 threads and 20 connections
+  Thread Stats   Avg      Stdev     Max   +/- Stdev
+    Latency   364.20ms  116.89ms 613.86ms   74.90%
+    Req/Sec    11.72      6.85    30.00     59.35%
+  259 requests in 5.10s, 38.00KB read
+Requests/sec:     50.77  -------- compared to 3.76 without gevent...
+Transfer/sec:      7.45KB</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Gevent made requests a coroutine-friendly library and thanks to concurrency, it enabled our example server to handle over 13.5 times more requests per second.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>In the end, we have a program that has coroutine-based concurrency (same principle as in asyncio or node.js) but its code still looks like synchronous one. We do not need special, cooperative libraries or async/await keywords in our code. It's almost like magic.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Patch in tests</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Python includes a utility for patching, i.e. <em>unittest.mock.patch.</em> The default way of using it is to decorate our test function. Assume we have a Django view that looks like this...</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from api.client import ApiClient
+
+def get_stats(request):
+    site_url = request.GET.get('url')
+
+    api_client = ApiClient()
+    stats = api_client.get_stats_for(site_url)
+
+    seconds = int(stats&#91;'time_to_respond'].total_seconds())
+    return JsonResponse({'latency': f'{seconds}s'})</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>and we would like to test it. We notice it has a dependency - <em>ApiClient</em> from another module. If we want to test <em>get_stats</em> view in a predictable, reliable way we need to use a test-double instead of ApiClient. However, there is no simple way to do so. If it was passed to <em>get_stats</em> as an argument, we could simply pass Mock instead.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>def get_stats(request, api_client_class):
+    ...
+    api_client = api_client_class()
+    ...</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>...but that's not the case. We can still use <em>patch</em> decorator, though!</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>@patch('api.client.ApiClient.get_stats_for')
+def test__get_stats__time_to_respond_is_timedelta__formats_as_seconds(client):
+    response = client.get('/stats/')
+
+    assert response.json() == {'latency': '63s'}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>This is not end yet, but if we put a debugger in the test, we notice that ApiClient.get_stats_for is now a MagicMock:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>@patch('api.client.ApiClient.get_stats_for')
+def test__get_stats__time_to_respond_is_timedelta__formats_as_seconds(client):
+    breakpoint()
+    response = client.get('/stats/')
+
+    assert response.json() == {'latency': '63s'}
+
+# after running pytest...
+(Pdb) from api.client import ApiClient
+(Pdb) ApiClient.get_stats_for
+&lt;MagicMock name='get_stats_for' id='140673873249856'></code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>It means that our mocking was successful. We replaced a problematic dependency with a Mock. By the way, if you look for best practices for using mocks, check out my <a href="https://breadcrumbscollector.tech/how-to-mock-in-python-almost-definitive-guide/">(almost) definitive guide about mocking in Python</a> or <a href="https://breadcrumbscollector.tech/beware-of-chicken-testing-or-mocks-overuse/">why mocking can be dangerous when overused</a>. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now, the test still fails because <em>get_stats</em> receives a MagicMock while it expects a dictionary. We need to parameterize the mock. We can do so by passing a second argument to <strong>@patch</strong>:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>@patch(
+    'api.client.ApiClient.get_stats_for',
+    Mock(return_value={'time_to_respond': timedelta(minutes=1, seconds=3)})
+)
+def test__get_stats__time_to_respond_is_timedelta__formats_as_seconds(client):
+    response = client.get('/stats/')
+
+    assert response.json() == {'latency': '63s'}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>This basically means that instead of <em>api.client.ApiClient.get_stats_for</em> we want a Mock that when called, will return <em>{'time_to_respond': timedelta(minutes=1, seconds=3)}</em>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Patch without decorator</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p><em>patch</em> can be also used as a context manger. A return result will be a Mock being inserted in a place of an attribute being patched:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>def test__get_stats__time_to_respond_is_timedelta__formats_as_seconds(client):
+    with patch('api.client.ApiClient.get_stats_for') as mock:
+        mock.return_value={'time_to_respond': timedelta(minutes=1, seconds=3)}
+
+        response = client.get('/stats/')
+
+    assert response.json() == {'latency': '63s'}
+</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>"Python patch doesn't work!" - how to do it right?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Sometimes you will face the situation when despite the presence of <em>patch </em>decorator or context manager, the dependency will look as if it wasn't patched at all. In short, it may be because there are multiple existing references to the thing you're trying to patch. The code under test uses one, but you successfully patched another. The operation was successful, but the patient died. What to do?</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>In short, you need to make sure you patch the same reference that code under test uses. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># views/__init__.py
+from api import client
+
+
+def get_stats(site_url):
+    api_client = client.ApiClient()
+    stats = api_client.get_stats_for(site_url)
+
+    seconds = int(stats&#91;'time_to_respond'].total_seconds())
+    return {'latency': f'{seconds}s'}
+
+
+# test_view.py
+@patch(
+    # we patch class in the module where it is imported into
+    # (the same our code under test comes from)
+    'view.client.ApiClient.get_stats_for',
+    ...
+)
+def test__get_stats__time_to_respond_is_timedelta__formats_as_seconds():
+    ...</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>See <a href="https://docs.python.org/3/library/unittest.mock.html#where-to-patch">Where to patch</a> section of unittest.mock documentation for more details. Alternatively, you can use a nifty alternative to <em>patch</em>, that is <em>patch.object</em>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>patch.object - simpler to get it right</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p><em>patch.object</em> is dead simple to use - you just import the object whose attribute you want to patch and apply <em>patch.object</em>:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>@patch.object(
+    ApiClient,  # object whose attribute I want to patch
+    'get_stats_for',  # the attribute name I want to patch
+    Mock(return_value={'time_to_respond': timedelta(minutes=1, seconds=3)})  # replacement for the patched attribute
+)
+def test__get_stats__time_to_respond_is_timedelta__formats_as_seconds():
+    response = get_stats('http://example.com/')
+
+    assert response == {'latency': '63s'}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>If you want to use patch.object for a method, you import a class. If you want to patch.object a function or entire class, import the module they live in.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Should you patch?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>(monkey-) patching should be used sparingly. That ought to be your last resort. In my code, I have no other option but patch thanks to dependency injection.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>In the long term price for such tricks is very, very high. Patching often means touching and changing implementation details in a way that was not foreseen by the authors. This introduces extra coupling with things that shouldn't have it. It means they will be harder to change.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><strong>If you really have to, patch only public API of another library or a module in your code.</strong></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><a href="https://pixabay.com/pl/photos/poprawka-kamie%C5%84-fasada-naprawa-2328289/">Image source</a>.</p>
+<p><!-- /wp:paragraph --></p>

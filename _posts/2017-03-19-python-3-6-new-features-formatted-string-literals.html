@@ -1,0 +1,56 @@
+---
+layout: post
+title: Python 3.6 new features - formatted string literals
+date: 2017-03-19 17:42:59.000000000 +01:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- dajsiepoznac2017
+- python
+tags: []
+permalink: "/python-3-6-new-features-formatted-string-literals/"
+---
+<p>On 23. December 2016 new minor version of Python was released - 3.6. It brings few enhancements and syntax features. In my opinion the most notable one is introduction of formatted string literals.</p>
+<pre class="lang:python decode:true">word = 'world'
+print(f'Hello, {word}!')  # prints 'Hello, world</pre>
+<p>I always envied Ruby's string interpolation because it is much cleaner and doesn't require programmer to read end of expression just to understand what is substituted where.</p>
+<p>String interpolation was always a pain in Python. Not to mention there is more than one way to do it...</p>
+<pre class="lang:python decode:true">some_string = "I'm %s" % ('interpolated', )
+other_string = "I'm {}".format('interpolated')</pre>
+<p>Clear violation of Zen of Python that states:</p>
+<blockquote><p>There should be one-- and preferably only one --obvious way to do it.</p></blockquote>
+<p>In order to violate it even more :evil: we have now third way to do the same thing. Yay!</p>
+<p>[caption id="attachment_67" align="aligncenter" width="500"]<img class="wp-image-67 size-full" src="{{ site.baseurl }}/assets/2017/03/standards.jpg" alt="" width="500" height="283" /> Credit goes to xkcd[/caption]</p>
+<p>...but its actually better than previous ones. Syntax of first one is quite concise, but can cause some troubles for python newcomers:</p>
+<pre class="lang:default decode:true">some_string = "I'm %s" % ('interpolated', )
+other_string = "I'm %s" % 'interpolated'  # The same thing! 
+another_string = '%s %s' % ("I'm", "interpolated")
+yet_another_string = '%s %s' % "I'm", "interpolated"  # Not an option! Raises TypeError</pre>
+<p>There is a shortcut that allows to omit giving tuple as argument for string interpolation, but it won't work with more than one argument. Nevertheless - this syntax makes it easy to format arguments just like old good sprintf does.</p>
+<pre class="lang:python decode:true">'%.2f ' % 5  #  Prints any numeric value as floating point
+'%.2f ' % Decimal('5.1254')
+'%.2f ' % 5.144</pre>
+<p>The same thing can be accomplished using "old-new" .format:</p>
+<pre class="lang:default decode:true">'{:.2f}'.format(5)
+'{:.2f}'.format(Decimal('1.1254'))
+'{:.2f}'.format(5.144)</pre>
+<p>Way more verbose than previous syntax. Differences between string interpolation are presented on <a href="https://pyformat.info/">pyformat.info</a> - awesome work done by Ulrich Petri and Horst Gutmann.</p>
+<p>Getting back to new syntax - it naturally has all features of "old-new" string interpolation with .format function, but removes need to actually call this method.</p>
+<pre class="lang:default decode:true">value = Decimal('1.2354')
+f'{value:.2f}'
+</pre>
+<p>This becomes especially helpful when formatting long strings (try to fit in standard PEP8's 80 characters per line without awkward line breaks) or in classes:</p>
+<pre class="lang:default decode:true ">class Point:
+    def __init__(self, x, y):
+        self.x = x
+        self.y = y
+
+    def __repr__(self):
+        return f'Point&lt;{self.x}, {self.y}&gt;'
+
+point = Point(3, 5)
+print(point)  # Point&lt;3, 5&gt;</pre>
+<p>This was merely a sneak peek of string formatting in Python, but it presented essential aspects of new so-called 'f-strings'.</p>

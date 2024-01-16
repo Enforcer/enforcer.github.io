@@ -1,0 +1,83 @@
+---
+layout: post
+title: What is asyncio's ensure_future?
+date: 2019-10-10 18:00:52.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- asyncio
+tags:
+- asyncio
+- asyncio_in_background
+- asyncio_task
+- call_me_later
+- ensure_future
+permalink: "/what-is-asyncios-ensure_future/"
+excerpt: tl;dr ensure_future let's us execute a coroutine in the background, without
+  explicitly waiting for it to finish. If we need, we can wait for it later or poll
+  for result. In other words, this is a way of executing code in asyncio without await.
+---
+<p><!-- wp:paragraph --></p>
+<p>tl;dr <strong>ensure_future</strong> let's us execute a coroutine <em>in the background</em>, without explicitly waiting for it to finish. If we need, we can wait for it later or poll for result. In other words, this is a way of executing code in <strong>asyncio without await</strong>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Asynchronous Python code written with asyncio remains pretty straightforward when one uses async/await keywords, because a) code resembles synchronous b) any switch to another coroutine is explicit.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># synchronous version
+def tweet_about_latest_article(feed_url):
+    response = requests.get(feed_url)  # make HTTP request
+    assert response.ok
+    articles = extract_articles_from_raw_xml_string(response.text)
+    tweet(articles[0])  # call Twitter's API
+
+# asynchronous version
+async def tweet_about_latest_article(feed_url):
+    with aiohttp.ClientSession() as session:
+        async with session.get(feed_url) as response:
+            assert response.status == 200
+            contents = await response.read()  # make HTTP request
+
+    articles = extract_articles_from_raw_xml_string(contents)
+    await tweet(articles[0])  # call Twitter's API</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>You can still read code from top to bottom and understand the flow. However, in async code a lot is happening under the hood. Whenever interpreter encounters <strong>await</strong> keyword, it may switch to another coroutine. So <strong>await</strong> is what makes event loop to check on whatever pending tasks are there and resume execution for one of them (Python is still single-threaded with asyncio!).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>What is asyncio's coroutine?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>A coroutine used to be an overloaded term, but for the sake of the article let's simplify a definition. <strong>async</strong> function is piece of code that can run concurrently (not in parallel!) and whose execution can be suspended while <strong>await</strong>ing for other coroutines to finish.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Do I have to wait?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>It is not always desired for an <strong>async</strong> function to <strong>await</strong> for another coroutine, especially if it does not return any result. Consider example function from the beginning - tweet_about_latest_article. In the end, we call Twitter's API and we don't actually need its result. What if we don't have to wait? Let's wrap a call with <strong>asyncio.Task</strong> factory - <strong>asyncio.ensure_future</strong>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>What is a Task in asyncio?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>One can think of Task as a single execution unit in asyncio. Exactly one Task is executed at any moment. Direct instantiation of a Task is discouraged - that's what <strong>asyncio.ensure_future </strong>is for. Since Python3.7 we can also use <strong>asyncio.create_task</strong>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>async def tweet_about_latest_article(feed_url):
+    with aiohttp.ClientSession() as session:
+        async with session.get(feed_url) as response:
+            assert response.status == 200
+            contents = await response.read()  # we need to wait for that
+
+    articles = extract_articles_from_raw_xml_string(contents)
+    asyncio.ensure_future(tweet(articles[0]))  # this can be done in background</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>What if I want to run blocking code in background?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Check out <a href="https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.loop.run_in_executor">asyncio's executors</a>! Now that you know what <strong>ensure_future</strong> is about, you can wrap <strong>loop.run_in_executor</strong> calls with <strong>asyncio.ensure_future</strong>. Also, don't forget to check <a href="https://breadcrumbscollector.tech/asyncio-choosing-the-right-executor/">which executor is the best for your use case</a>.</p>
+<p><!-- /wp:paragraph --></p>

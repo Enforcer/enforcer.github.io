@@ -1,0 +1,279 @@
+---
+layout: post
+title: 'mypy: how to use it in my project?'
+date: 2020-03-20 20:17:00.000000000 +01:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- mypy
+- python
+- type annotations
+tags: []
+permalink: "/mypy-how-to-use-it-in-my-project/"
+---
+<p><!-- wp:heading --></p>
+<h2>Type annotations are like comments</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Type annotations are a great addition to Python. Thanks to them, finally our IDEs are able to provide good quality autocompletion. They did not turn Python into statically typed language, though. If you put a wrong annotation (or forget to update it after code change), Python will still happily try to execute your program. It just may fail miserably. Type annotations are like comments - they do not really have any influence on the way how your program works. They have also the same disadvantage - once they become obsolete, they start leading developers astray. Type annotations advantage is that they have a very specific format (unlike comments) so can be used to build tools that will make your life easier and code better. In this article, you will learn how to start using mypy, even if you like to add it to your existing project.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>For the needs of this article, I will be using a large legacy monolithic project written in Django. I won't show any actual snippets from it (because I have NDA on that) but I will demonstrate how mypy can be added even to such a messy codebase.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Step 1: install mypy</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The first step is as easy as <code>pip install mypy</code></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>mypy works like a linter - it performs static code analysis just like <a href="https://www.pylint.org/">pylint</a> or <a href="https://pypi.org/project/pycodestyle/">pycodestyle</a>. Hence, if you split your dependencies into dev and "production" ones, you want to include mypy in the first category. If you use poetry, you could do with the command: <code>poetry add --dev mypy</code></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Don't run it yet because you will only see dozens to thousands of errors you can't really do anything about.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Step 2: Create the most basic mypy.ini</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Create a config file in the root directory of your backend code and call it mypy.ini:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>[mypy]
+ignore_missing_imports = True
+</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>If you decided to ignore my warning and run mypy, it must have complained a lot about <code>Skipping analyzing '
+<library name>': found module but no type hints or library stubs </library></code></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>That happens because mypy tries to check if 3rd party libraries. However, a lot of Python libraries is simply not type-annotated (yet), so that's why we ignore this type of error. In my case (legacy Django project) this particular error was raised 3718 times.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Ideally, you would now see zero complaints but that's rarely a case. Even though I have no type annotations, mypy is still able to find some issues thanks to inferring (guessing) types. For example, it is able to tell if we use a non-existent field of an object.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Dynamic typing versus mypy</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Before showing the next step, let's digress for a moment. Even though mypy complains about a few code lines it does not necessarily mean the code there won't work. Most likely it does, it is just that mypy is not able to confirm that. When you start to write type annotations you will learn to write code in a bit different way. It will be simpler to analyse by mypy so it will complain considerably less.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Bear in mind that mypy is still in active development. At the moment of writing this article, it was in version 0.770. The tool may sometimes give false negatives i.e. complain about working code. In such a case, when you are certain the code works (e.g. is covered by tests) then you just put <code># type: ignore</code> comment at the end of the problematic line of code. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Step 3: Choose one area of code you want to type-annotate</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>It is unrealistic to expect that introducing type annotations and mypy is possible in a blink of an eye. In legacy projects (like the one I experiment on) it would be a titanic effort to type-annotate all the code. Worse, it could bring no real benefit because certainly some areas are not changed anymore. I am sure there is a plenty dead code. Moreover, mypy will definitely affect the way of working on the project for the whole team. Lastly, we may simply come to the conclusion it is not working for us and want to get rid of that.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>The point I am trying to make is - start small. Choose one area of code and start adopting mypy there. Let's call this an experiment.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>My legacy Django project consists of 28 applications. I could just choose one of them but I can go even further, for example, enforce type hints in just one file. Go with the size you are comfortable with. As a rule of thumb, you should be able to type-annotate it in less than 2 days, possibly less.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>I've chosen an area that is still used but not changing too often except for rare bug fixes. Let's say the application I will type-annotate is called "blog".</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Step 4: Turn off type checking in all areas except your experiment</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now, change your mypy.ini to something like:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>[mypy]
+ignore_missing_imports = True
+ignore_errors = True
+
+[mypy-blog.*]
+ignore_errors = False</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Where blog is a module you want to start with. If you would like to start with an even narrower scope, you can add more submodules after the dot.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>[mypy]
+ignore_missing_imports = True
+ignore_errors = True
+
+[mypy-blog.admin.*]
+ignore_errors = False</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Step 5: Run mypy</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now, type <code>mypy .</code> This will once again print errors, but hopefully not too many. In my case, it is just 9 errors in 3 files. Not that bad.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Step 6: Fix errors</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>As I mentioned above, there are certain patterns I would say that make mypy freakout. As an exercise, you should rewrite the code or just learn how to put <code># type: ignore</code> comment :)</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>In my code, 4 out of 9 errors concerned dead code, so I removed it. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Another one was complaining about Django migration. Since I have no interest in annotating it, I disabled checking migrations path in mypy.ini.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>[mypy]
+ignore_missing_imports = True
+ignore_errors = True
+
+[mypy-blog.*]
+ignore_errors = False
+
+[mypy-blog.migrations.*]
+ignore_errors = True</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Remaining four errors were all found in admin.py file. One of them complained about assigning short_description to a function:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># mypy output
+error: "Callable[[Any, Any, Any], Any]" has no attribute "short_description"
+
+# in code
+def delete_selected(modeladmin, request, queryset):
+    ...
+
+delete_selected.short_description = "Delete selected SOMETHING #NDA"</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>mypy is right by saying the function indeed does not have short_description. On the other hand, this is Python and functions are objects. Hence, we can dynamically add properties to it in runtime. Since this is Django functionality, we can safely ignore it.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>delete_selected.short_description = "Delete selected article language statuses"  # type: ignore</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Three errors left. All of them are the same and they are false negatives (but blame's on me, I fooled mypy into thinking the code will not work)</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># mypy output
+error: Incompatible types in assignment (expression has type "Type[BlogImage]", base class "MyAdminMixin" defined the type as "None")
+
+# in code
+class BlogImageInline(MyAdminMixin, admin.TabularInline):
+    model = BlogImage  # this line is problematic
+
+class MyAdminMixin:
+    model = None</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Simply saying, we inherit from a class that has a field declared with default value None. It is always overridden in subclasses, but mypy thinks we are doing something nasty that way. Well, in reality, we're gonna always use a subclass of Django model here, so let's just type annotate our mixin and get rid of final 3 errors:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from django.db import models
+from typing import Type
+
+
+class MyAdminMixin:
+    model: Type[models.Model]</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Step 7: Turn on more restrictive checks</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>By default mypy only checks code that either has type annotations or the type can be inferred. It doesn't force writing type annotations on you, though eventually, you want it. It is much simpler to enforce it when starting a greenfield project, but not impossible in legacy codebases.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>There is a lot of options to find out, but let's start from the most useful two:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>disallow_untyped_defs</li>
+<li>disallow_untyped_calls</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>Just put them in your mypy.ini with value = True to start getting errors for missing type annotations. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>[mypy]
+ignore_missing_imports = True
+ignore_errors = True
+
+[mypy-blog.*]
+ignore_errors = False
+disallow_untyped_defs = True
+disallow_untyped_calls = True</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>There are plenty of other options worth checking out. See <a href="https://mypy.readthedocs.io/en/stable/config_file.html">The mypy configuration file</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Step 8: Fix errors</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now I got 122 errors from 13 files. The most common one is complaint about missing type annotations in a function. In other words, mypy wants us to put annotations for arguments and return types.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>error: Function is missing a return type annotation
+</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>It doesn't mean I have to do all this mundane work at once. For example, 62 out of 122 are coming from tests. I can as well disable checks there (at least temporarily) to focus on annotating views, serializers and models.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>[mypy]
+ignore_missing_imports = True
+ignore_errors = True
+
+[mypy-blog.*]
+ignore_errors = False
+disallow_untyped_defs = True
+disallow_untyped_calls = True
+
+[mypy-blog.tests.*]
+disallow_untyped_defs = False
+disallow_untyped_calls = False</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Then, start adding annotations to functions...</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># before
+def translate_blog_post(source_language_id, destination_langauge_id):
+    pass
+
+# after
+def translate_blog_post(source_language_id: int, destination_langauge_id: int) -> None:
+    pass</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Let mypy guide you. Run it often to fix new issues as they appear. For example, when you type annotate your functions, it will tell you about places when you misuse them, for example by giving None as an argument even though type annotation specifies it should be int.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>The whole process can be tiresome, but it is the best way to learn how to write type annotations.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Step 9: Repeat steps 7-8</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>That's it for our short guide of adopting mypy :) Stay tuned for the next two parts where we are going to explore ways to automate type annotating codebases and learn about awesome tools that use type annotations to make your life easier and code better.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>What can't be covered by this is series is how to efficiently write type annotations. You need to practice on your own. Don't forget to check out mypy and typing module's documentation (links below).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Let me know in comments if you have encountered any interesting problems when trying to adopt mypy!</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Further reading</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li><a href="https://mypy.readthedocs.io/en/stable/config_file.html">The mypy configuration file</a></li>
+<li><a href="https://mypy.readthedocs.io/en/stable/cheat_sheet_py3.html">Type hints cheat sheet</a></li>
+<li><a href="https://docs.python.org/3/library/typing.html">typing module documentation</a></li>
+<li><a href="https://blogs.dropbox.com/tech/2019/09/our-journey-to-type-checking-4-million-lines-of-python/">Dropbox: Our way to type checking 4 millions of Python</a></li>
+</ul>
+<p><!-- /wp:list --></p>

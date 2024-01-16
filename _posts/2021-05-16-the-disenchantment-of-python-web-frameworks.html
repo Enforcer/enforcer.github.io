@@ -1,0 +1,115 @@
+---
+layout: post
+title: The disenchantment of Python web frameworks
+date: 2021-05-16 21:03:37.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- django
+- python
+- software engineering
+tags: []
+permalink: "/the-disenchantment-of-python-web-frameworks/"
+---
+<p><!-- wp:paragraph --></p>
+<p>tl;dr Popular Python web frameworks have less significant differences than it appears. Then, there's Django which makes all competition look <em>micro</em>. Even given the rising popularity of FastAPI, I strongly believe there's room for at least one another big framework.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Comparing Python frameworks</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Back when I worked for a software house - STX Next I contributed several times to an article on their blog entitled <a href="https://www.stxnext.com/blog/beginners-introduction-python-frameworks/">A Beginner’s Introduction to Python Web Frameworks</a>. The goal there was to provide a rough overview of available solutions. During work for the same company, I got hands-on experience with Django, Flask and Pyramid. In my opinion, Flask and Pyramid are quite alike. Others that I've been using for shorter periods of time are Sanic, aiohttp and Falcon. Currently, I'm working mostly with FastAPI and graphene.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>How does the process of learning a new framework looks like? "Okay, here's some hello world tutorial that shows how to manage routing, views, etc."</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Although the syntax may differ, for the most of the time the end result is exactly the same.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"id":953,"sizeSlug":"large","linkDestination":"none"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2021/05/alliseeis-1024x441.jpg" alt="" class="wp-image-953" /></figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>If one needs anything else, their best bet would be to type [name of framework]-[3rd party lib / missing function] into Google:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>aiohttp-jwt</li>
+<li>flask-sqlalchemy</li>
+<li>flask-login</li>
+<li>pyramid-openapi3</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>A common denominator for them is to leave design decisions up to developers - no imposed ORM or even type of databases, etc. There's huge freedom in how to arrange code and your logic. Also, there are countless ways to do it wrong.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>The most recent game-changer is having async support. I'm glad to see that new frameworks have it and existing ones (e.g. Flask or Django) are adding it. So it would be safe to assume that in a near future it will be available at hand. The other significant difference is what's included. One hast to mention FastAPI that skillfully combines several libraries and <a href="https://www.starlette.io/">Starlette</a> framework to provide superior developer experience. I believe that prior to FastAPI, the only option to get such automatically updating documentation was to manually integrate several smaller libraries.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>And then, there's Django.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Django is a state of mind</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:image {"id":954,"sizeSlug":"large","linkDestination":"none","className":"is-style-default"} --></p>
+<figure class="wp-block-image size-large is-style-default"><img src="{{ site.baseurl }}/assets/2021/05/Zrzut-ekranu-2021-05-15-o-14.36.12.png" alt="" class="wp-image-954" /><br />
+<figcaption>Paraphrase of "Mac is a state of mind" from 2007 <a href="https://www.youtube.com/watch?v=Jkrn6ecxthM">"Mac or PC" Rap Music Video</a></figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>It has an order of magnitude more "goodies" bundled. It could be also characterised as opinionated. I don't see it as a bad thing - but it's a trait that cannot be ignored. To me, Django is Python's Ruby On Rails. The most apparent similarity is their approach to persistence - both rely on the Active Record pattern. Django ORM sounds more familiar, but it's just a reincarnation of an old pattern that says "attach <code>save</code> method to the model!". </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>It's so appealing, that this concept has been copied in the Python world several times - <a href="https://github.com/MasoniteFramework/masonite">Masonite's Orator</a>, async-ready <a href="https://tortoise-orm.readthedocs.io/en/latest/">Tortoise ORM</a> or <a href="http://docs.peewee-orm.com/en/latest/">peewee</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Beyond frameworks</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>To sum up, you're either left to Django that makes a lot of decisions for you or a microframework where you have to figure out many things on your own. Microframeworks can provide building blocks (such as blueprint in Flask or router in FastAPI) but you can arrange them as you see fit. It's a completely different experience from Django that has <code>startapp</code> CLI command.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>In the longer term, what makes sense is how the project was divided (not with what means), how well it is tested or how easy it is for newcomers to grasp the overall structure. Of course, that counts if and only if the project is successful and has a chance to grow old.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>My ideal framework</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>In my opinion, in Python's ecosystem there's a room for at least one more framework. It should have:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>first-citizen dependency injection container (no, not like in FastAPI - not bound to views),</li>
+<li>async support,</li>
+<li>an ORM as powerful as SQLAlchemy (or the SQLAlchemy itself) but as an option,</li>
+<li>testability from the ground up, starting from test client to tips on making app testable in parallel using pytest-sdist, </li>
+<li>basic web framework stuff such as routes, views, etc,</li>
+<li>GraphQL support or tips on integrating it would be nice,</li>
+<li>+ other boring stuff like configuration supporting several mechanisms etc</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:heading --></p>
+<h2>What can you have today from this list?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>As far as I know, there are no frameworks in Python that would have all these features. My closest bet is to create one's own mix using:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>injector (no async support :( - but there's also <a href="https://python-dependency-injector.ets-labs.org/providers/async.html">Dependency Injector</a>)</li>
+<li>some configuration lib, which will be convenient with your deployment environment,</li>
+<li>Starlette</li>
+<li>SQLAlchemy (with recent advancements in supporting async it's really promising!)</li>
+<li>pytest + pytest-sdist + python-mockito + a few others</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>This post is mostly an old man's rant, but the point is simple - don't sweat it when choosing the next framework. Choose what seems to be the most comfortable in the mid-term (e.g. built-in features), but consider what it will take to support the solution in the long-term.</p>
+<p><!-- /wp:paragraph --></p>

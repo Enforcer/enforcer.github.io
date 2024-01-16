@@ -1,0 +1,98 @@
+---
+layout: post
+title: Dive into Python's asyncio, part 2
+date: 2017-04-19 20:43:19.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- asyncio
+- dajsiepoznac2017
+- python
+tags: []
+permalink: "/dive-into-pythons-asyncio-part-2/"
+---
+<p>All examples were tested under Python 3.6.</p>
+<h2>The only asyncio rule</h2>
+<p>After reading <a href="https://breadcrumbscollector.tech/dive-into-pythons-asyncio-part-1/">part 1</a> you should already know, that a heart of asyncio is an event loop.</p>
+<p>There is exactly one rule - <strong>do not block the event loop</strong>! Never ever. Fortunately, it's quite simple to avoid this.</p>
+<ul>
+<li>Use only co-operative libraries for blocking I/O operations (or the other way round - do not use not co-operative ones)</li>
+<li>Don't do CPU intensive operations in the same process, because they will effectively freeze whole application during calculations</li>
+</ul>
+<p>First point has some serious implications. Namely, it means that you have to replace many libraries from your stack. Forget <a href="http://docs.python-requests.org/en/master/">requests</a>, for instance. Embrace <a href="http://aiohttp.readthedocs.io/en/stable/">aiohttp</a> instead. An exhaustive list of available libraries can be found on github in <a href="https://github.com/timofurrer/awesome-asyncio">awesome asyncio</a> repository.</p>
+<p>To better understand why this is so important, let's consider following example:</p>
+<pre class="lang:python decode:true">from aiohttp import web
+
+
+async def handle(request): # 1
+    name = request.match_info.get('name', "Anonymous")
+    text = "Hello, " + name
+    return web.Response(text=text)
+
+
+app = web.Application()
+app.router.add_get('/', handle)
+app.router.add_get('/{name}', handle)
+
+web.run_app(app, host='127.0.0.1', port=8001)
+</pre>
+<p>This is a very simple HTTP server, that utilizes aiohttp library. It greets everyone who bothers telling it their name. Getting <em>http://127.0.0.1:8001/John</em> shows <em>Hello, John</em>.</p>
+<p>At <strong>#1</strong> we see <em>async</em> keyword at the beginning of a line. It means that <em>handle </em>function is a coroutine. The latter stands for independent execution unit that may be used in asyncio flow. Couroutines represent some 'heavy' operation that will end eventually. For instant, we consider all I/O operations, like database queries or HTTP requests heavy operations.The unique thing about coroutines is that they can explicitly suspend they execution when waiting for other coroutines to finish. This is not visible in above example, but let's slightly modified one:</p>
+<pre class="lang:python decode:true">import async_timeout
+from aiohttp import web, ClientSession, TCPConnector
+
+import xml.dom.minidom
+
+
+async def fetch(url):
+    connector = TCPConnector(verify_ssl=False)
+    async with ClientSession(connector=connector) as session:
+        with async_timeout.timeout(10):
+            async with session.get(url) as response:  #5
+                return await response.text()
+
+
+async def handle(request):  #1
+    name = request.match_info.get('name', "Anonymous")
+
+    url = 'https://breadcrumbscollector.tech/feed/'
+    raw_xml = await fetch(url)  #2
+    decoded = xml.dom.minidom.parseString(raw_xml)  #3
+    last_build_date_el = decoded.getElementsByTagName('lastBuildDate')[0]  #4
+    last_build_date = last_build_date_el.firstChild.nodeValue
+
+    text = f'Hello, {name}. Recent feed was built on {last_build_date}'
+    return web.Response(text=text)
+
+
+app = web.Application()
+app.router.add_get('/', handle)
+app.router.add_get('/{name}', handle)
+
+web.run_app(app, host='127.0.0.1', port=8001)
+</pre>
+<p>This is an extension of the previous example. Now, on every request (<strong>#1</strong>) we GET this blog's feed (<strong>#2</strong>), decode XML (<strong>#3</strong>) and extract build date (<strong>#4</strong>). Whole logic of HTTP client is enclosed in a seperate coroutine, <em>fetch</em>.</p>
+<p>We see usage of new keyword - <em>await</em>. Thing to bear in mind is that asyncio's event loop can switch execution context on every <em>await</em>. Assuming that getting data from <a href="http://breadcrumbscollector.tech/feed/">breadcrumbscollector.tech/feed/</a> takes a lot of time, <strong>#5</strong> will probably be the place where switching between clients will occur most frequently. To illustrate this, refer to the image below. Red pointer shows asyncio's execution path:</p>
+<p><img class="aligncenter size-full" src="{{ site.baseurl }}/assets/2017/04/asyncio-flow.png" width="438" height="362" /></p>
+<p>We see that during handling first client's request another client requested something. We are not able to serve them in parallel, so we wait until convenient moment. It occurs when first client's request handling encounters <em>await session.get</em>. Since event loop has nothing better to do right then, it starts executing second client's request handling logic. This execution switch is marked in the picture as <strong>Client Switch #1</strong>. Therefore, we are able to utilize our CPU more and handle more clients in the same period of time.</p>
+<p>&nbsp;</p>
+<p>What if we couldn't suspend execution on blocking operations with no other means providing concurrent clients handling? One can easily find themselves in such situation without co-operative libraries.</p>
+<p><img class="aligncenter size-full" src="{{ site.baseurl }}/assets/2017/04/asyncio-flow2.png" width="558" height="378" /></p>
+<p>What we see in the picture above is called serialization. Application is able to handle only one request at the same time. Obviously, we can't afford it, because client's of this app shouldn't wait in such queue - no matter if they are humans or other applications - this becomes a bottleneck.</p>
+<p>This is the case we should avoid like the plague when doing asynchronous I/O. Always use co-operative libraries and you should be fine.</p>
+<p>However, this explanation adheres only to one of aforementioned problems. The second issue, CPU-intensive operations can not be simply adressed by using some magic 'co-operative libraries'.</p>
+<p>First approach to this is: don't do it. At least not in an asyncio based applications. Delegate it somewhere else, push it to task queue.</p>
+<p>If you really have to do this in the same application, then at least make sure it can handle I/O requests "in the background".</p>
+<p>A little tricky way to do this is to manually invoke <em>asyncio.sleep</em>, for example</p>
+<pre class="lang:default decode:true">for x in range(10000):
+    do_some_heavy_computation(x)
+    await asyncio.sleep(1)</pre>
+<p>However, it will still lock event loop for a majority of time calculations are done.</p>
+<p>Better way utilizes <a href="https://docs.python.org/3/library/asyncio-eventloop.html#asyncio.AbstractEventLoop.run_in_executor">AbstractEventLoop.run_in_executor</a>. Asyncio will then delegate our function to pool of threads (by default) or processes and return result as coroutines do.</p>
+<pre class="lang:default decode:true "># executor=None causes asyncio to use default pool of threads
+result = await loop.run_in_executor(executor=None, func=heavy_calculus)
+</pre>
+<p>&nbsp;</p>

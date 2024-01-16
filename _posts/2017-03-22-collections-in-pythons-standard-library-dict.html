@@ -1,0 +1,64 @@
+---
+layout: post
+title: 'Collections in Python''s standard library: dict'
+date: 2017-03-22 22:16:05.000000000 +01:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- dajsiepoznac2017
+- python
+tags: []
+permalink: "/collections-in-pythons-standard-library-dict/"
+---
+<p><em>Warning: this post's contents is based on Python 3.6rc1 source code - most recent available one at the moment of writing.</em></p>
+<h2>Dicts are omnipresent</h2>
+<p>A lot of things in Python are dicts. Your programs use dictionaries extensively even if you do not explicitly instantiate them.  There is a global registry of loaded modules, so they do not have to be read from HDD every time you request them using import statement.</p>
+<pre class="">&gt;&gt; import sys
+&gt;&gt;&gt; type(sys.modules)
+&lt;type 'dict'&gt;</pre>
+<p>Every class and every object uses dict internally to store attributes - methods and variables. Unless they use __slots__, but that's a different story.</p>
+<pre class="">class A:
+    """Demo of using dicts in classes"""
+    # class-level property
+    SOME_PROPERTY = 123
+    def __init__(self, some_property):
+        # instance-level property
+        self.some_property = some_property
+
+A.__dict__  # {'__module__': '__main__', '__doc__': 'Demo of using dicts in classes', '__init__': &lt;function __init__ at 0x10f109e60&gt;, 'SOME_PROPERTY': 123}</pre>
+<p>Notice that class stores in its __dict__ all methods and class-level variables. Presence of __doc__ here may also be surprising, but makes perfect sense.</p>
+<pre class="">a = A('some_value')
+a.__dict__  # {'some_property': 'some_value'}</pre>
+<p>Creating an instance of <em>A</em> and assigning <em>some_property</em> in <em>__init__</em> method results in saving this property in instance's __dict__.</p>
+<p>In the end we are able to reach class-level properties from instance using exact same notation as if we were to ask object for its instance-level attribute.</p>
+<pre class="">a.SOME_PROPERTY</pre>
+<p>This works because Python uses both __dict__'s to find requested attribute. Firstly instance-level __dict__ is checked, then the interpreter moves to class-level __dict__. Finally, if no attribute was found then AttributeError is raised.</p>
+<p>These examples are just a tip of the iceberg. Nevertheless they show how heavily dict is utilized in Python.</p>
+<h2>Dicts are meant to be fast</h2>
+<p>...which is not trivial regarding</p>
+<blockquote><p>being all things to all people</p></blockquote>
+<p>as was once stated in <a href="http://shop.oreilly.com/product/9780596510046.do">Beatiful Code</a>. There are some interesting details about Python's dict implementation. This blog post will actually revolve around them, pointing out how they can be leveraged.</p>
+<p>A good dictionary is expected to provide efficient lookup operation. In other words, if we ask dict about presence of value under given key, we expect it to be very fast. Inserting new pair (key, value) into dictionary is second most commonly optimized operation.</p>
+<p>Most ordinary dictionary implementation is based on so called hash table. It means that it resides in a memory as a contiguous area where individual values are stored in seperate cells.</p>
+<p>Resembles a list, doesn't it? Indeed, since under the hood it uses the same data structure. The special part about dict is that underlying table is sparse - there are many unused cells. So, if dict's values are stored in a numerical indexed table (hey, that's just a C-table of <em>PyObject</em> pointers!) how they are mapped into nice, human-readable keys? This is where <strong>hashing</strong> comes into play.</p>
+<p><img class="aligncenter wp-image-73 size-full" src="{{ site.baseurl }}/assets/2017/03/c_dict_2.png" alt="" width="583" height="188" /></p>
+<p>In simple words, hashing is a process of translating a key into numerical value that will be used to index underlying table. An ideal hash function would never translate different keys to the same index (we then speak of "collision") and would never leave an empty space in table. As we all know, there are no ideal algorithms, only solutions that solve certain problem in a specific context and cause another ones, or more diplomatically saying - "having many undesired features". In real life, collisions occur.</p>
+<p>[caption id="attachment_77" align="aligncenter" width="563"]<img class="wp-image-77 size-full" src="{{ site.baseurl }}/assets/2017/03/c_dict_3_eng.png" alt="" width="563" height="170" /> Collision, the same index (0) was assigned to k1 and k2[/caption]</p>
+<p>In real life, there are many empty, unused cells in tables used for dictionaries that stand for nothing but a memory waste.</p>
+<p><img class="size-full wp-image-75 aligncenter" src="{{ site.baseurl }}/assets/2017/03/c_dict_1.png" alt="" width="563" height="93" /></p>
+<p>Actually, these two <em>features</em> are connected. Extra space is always left to better cope with collisions, because when the latter occurs, we can not just pretend that nothing happened and neither discard old key-value pair nor ignore attempt of inserting new value.</p>
+<p>In CPython there is a quite sophisticated algorithm for finding free space if collision occurs, but this one is beyond scope of this post.</p>
+<p>Instead, let's talk about space occupied or  how many empty cells has to be maintained? The source code says, that dictionaries are filled up to 2/3 are extended using formula:</p>
+<pre class="">used*2 + capacity/2</pre>
+<p>where <em>used </em>are blue cells, filled with data and capacity is an overall number of  cells, no matter if they are used or not. Less obvious thing coming from this formula is that dicts double in size when growing without any deletions.</p>
+<p>Dict implementation changes slightly with every version of CPython. Python 3.6 introduced another feature, that is...</p>
+<h2>dict preserves order of inserted keys since Python 3.6</h2>
+<p>That's implementation detail. <strong>You should never ever rely on it! </strong>This may obviously change in future Python releases. If you like this feature, then use <a href="https://docs.python.org/3.6/library/collections.html#collections.OrderedDict">collections.OrderedDict</a> instead.</p>
+<p>Prior to version 3.6 keys' order was random and could change due to dict's growth and reindexing whole structure when dict was mutated.</p>
+<p>General idea of new implementation may be found <a href="https://morepypy.blogspot.com/2015/01/faster-more-memory-efficient-and-more.html">here</a>.</p>
+<h2>Conclusion</h2>
+<p>Dicts are powerful, yet memory-costly collections. They are very fast once populated. However, big dictionaries are much less efficient when it comes to adding/removing elements continously.</p>
+<p>&nbsp;</p>

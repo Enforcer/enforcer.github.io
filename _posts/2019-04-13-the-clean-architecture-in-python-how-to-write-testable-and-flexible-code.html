@@ -1,0 +1,495 @@
+---
+layout: post
+title: The Clean Architecture in Python. How to write testable and flexible code
+date: 2019-04-13 06:19:04.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- clean architecture
+- python
+tags: []
+permalink: "/the-clean-architecture-in-python-how-to-write-testable-and-flexible-code/"
+---
+<p><!-- wp:paragraph --></p>
+<p>(Hey! This article is almost 2 years old :) Look here for something about <a href="https://breadcrumbscollector.tech/python-the-clean-architecture-in-2021/">the Clean Archictecture in 2021</a>)</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>An ideal project?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>If someone asked about the features of an ideal project, responses would surely mention a few specific things. First of all, an ideal project would have a clean codebase that is simple to read. Secondly, there should be high test coverage to ensure that the project works as expected. What is more, one will instantly know if they broke something thanks to an extensive suite of automated tests. Last, but not least - technical debt should be kept at bay to not pose a threat of lowering a team's velocity. I bet you already see how enjoyable would be to work on such a project! Unfortunately, software like this is a real rarity. Time to change it.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Building such a masterpiece sounds like a hell of a work.  Luckily, countless software engineers have already responded to the challenge. This article describes one of the proposed designs - so-called The Clean Architecture authored by Robert C Martin in his 2012<a href="https://8thlight.com/blog/uncle-bob/2012/08/13/the-clean-architecture.html"> blog post </a>and a <a href="https://www.amazon.com/Clean-Architecture-Craftsmans-Software-Structure/dp/0134494164">book</a> that was published at the end of 2018. As you can see, the concept has not been conceived yesterday. The Clean Architecture based on even older concepts, such as <em>Onion Architecture</em> or <em>Ports and Adapters</em> (AKA <em>Hexagonal Architecture</em>).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Motivation</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>I wrote this blog post because I succeeded in applying the Clean Architecture in two Python projects - both of them reached production and are still being used and developed. This article contains python-specific techniques and tools helpful in embracing the Clean Architecture. The article is based on my talk that I gave 13 times so far (including PyCarribean, PyGotham or Python London Meetup). See recording <a href="https://www.youtube.com/watch?v=18IqltQ4XE4">here</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>The most interesting observation that leads to searching for better ways of writing software is the fact that all software is created to satisfy business needs. Since the requirements (and code that implements them) are crucial, we want to treat them as the first-class citizen. It means one should not scatter business logic around in random places. It deserves to have its own, designated area which is independent of tools we use. In short, we want our business logic to be:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>independent of framework</li>
+<li>easily testable in isolation without having to mock out half of the code</li>
+<li>independent from UI, API</li>
+<li>independent from databases</li>
+<li>independent from any third party services</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>Such a level of decoupling is possible thanks to using abstraction layers and techniques like <a href="https://www.martinfowler.com/articles/injection.html">Dependency Injection</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Example project - auctioning platform</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>To illustrate the Clean Architecture, we will use an example project of an auctioning system. Among requirements there are these User Stories:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>As a bidder, I would like to place a bid to win an auction</li>
+<li>As a bidder, I would like to be informed by an e-mail when my bid is the winning one</li>
+<li>As an administrator, I would like to withdraw a selected bid from an auction</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:heading --></p>
+<h2>Let's use Django + DRF</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Django is the most popular web framework in the Python world. It makes it possible to create web applications in no time (at least in the beginning) thanks to a plethora of goodies bundled with the framework. Django Rest Framework (DRF) brings to the party a bunch of classes helpful during creating a REST API. Among these goodies, we get certain building blocks which one can arrange in order to build the project. The building blocks are:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image --></p>
+<figure class="wp-block-image"><img src="{{ site.baseurl }}/assets/2019/04/klocki-django.png" alt="" /><br />
+<figcaption>The most important Django + DRF building blocks</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>At first glance, one can see that there is one central building block, on which all others depend. It is <em>Model</em> - a class that will be mapped onto a table in a database. In other words, in order to do anything meaningful with Django one has to define their <em>Models</em> first. One way is to take a look at User Stories and look for nouns:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>As a <strong>bidder,</strong> I would like to place a <strong>bid</strong> to win an <strong>auction</strong></li>
+<li>As a <strong>bidder,</strong> I would like to be informed by an <strong>e-mail</strong> when my <strong>bid</strong> is the winning one</li>
+<li>As an <strong>administrator,</strong> I would like to withdraw a selected bid from an <strong>auction</strong></li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>Every word in bold from above list is a perfect candidate for a <em>Model</em>. Let's focus on the most important two:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class Auction(models.Model):
+    title = models.CharField(...)
+    initial_price = models.DecimalField(...)
+    current_price = models.DecimalField(...)
+
+class Bid(models.Model):
+    amount = models.DecimalField(...)
+    bidder = models.ForeignKey(...)
+    auction = models.ForeignKey()</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><em>Note: At this stage, before we started to reason about any use cases, we committed to a database structure!</em></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>With code above one needs only two commands to generate (makemigrations) and execute migrations (migrate) to prepare a database for saving our <em>Models</em>. Let's focus on the third User Story:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>As an <strong>administrator</strong> I would like to withdraw a selected bid from an <strong>auction</strong></li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>One of the coolest Django's features is the admin panel. In order to get an edit view of a single auction with a list of all its bids with delete checkboxes one has to write literally six lines of code. If withdrawing a bid amounted to just removing a row from the database we would be completely satisfied with the solution. It is not that easy, though. One still has to recalculate current price of the auction and potentially send an e-mail to a new winner (if an administrator happens to withdraw a currently winning bid). Luckily, there are plenty of places in Django where we can put our custom logic. In this case, we want to override <em>save_related</em> method:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>def save_related(self, request, form, formsets, *args, **kwargs):
+    ids_of_deleted_bids = self._get_ids_of_deleted_bids(formsets)  # 1
+ 
+    bids_to_withdraw = Bid.objects.filter(pk__in=ids_of_deleted_bids)  # 2
+    auction = form.instance  # 3
+ 
+    old_winners = set(auction.winners)
+    auction.withdraw_bids(bids_to_withdraw)  # 4
+    new_winners = set(auction.winners)
+ 
+    self._notify_winners(new_winners - old_winners)   # 5
+
+    super().save_related(request, _form, formsets, *args, **kwargs)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:list {"ordered":true} --></p>
+<ol>
+<li>ids of Bid models are pulled from form data</li>
+<li>Bid models are fetched from the DB</li>
+<li>Auction model is already available thanks to Django</li>
+<li>We tell auction to run withdrawing bids logic, so it can update its current price and potentially a list of winners</li>
+<li>We notify new winners (if there are any)</li>
+</ol>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>Good job, we fulfilled part of business requirements. At the same time, the code we wrote is tightly coupled with the framework. The implementation is impossible to test without the database. What is worse, it is hidden somewhere in the admin panel. We can do better than that.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>The Clean Architecture in action</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Use Case - first building block</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Using this approach one does not start from business entities (or models in Django), but instead from processes - User Stories. The building block that will implement them is called <em>Use Case</em> or <em>Interactor</em>. Its name is representing the exact business scenario. They are loosely modelled after User Stories.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class WithdrawingBidUseCase:
+    def withdraw_bids(self, auction_id, bids_ids):
+        auction = Auction.objects.get(pk=auction_id)
+        bids_to_withdraw = Bid.objects.filter(pk__in=bids_ids)
+
+        old_winners = set(auction.winners)
+        auction.withdraw_bids(bids_to_withdraw)
+        new_winners = set(auction.winners)
+
+        self._notify_winners(new_winners - old_winners)
+        
+        auction.save()</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Business logic responsible for withdrawing bid has been moved from admin panel to a designated class. Please notice that <em>WithdrawingBidUseCase</em> can be used from any context and it is no longer aware of admin panel existence - it needs just ID of an auction and bids IDs to withdraw.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:quote --></p>
+<blockquote class="wp-block-quote"><p><em>Use Case</em> /<em> Interactor</em> is to orchestrate a specific scenario.</p>
+</blockquote>
+<p><!-- /wp:quote --></p>
+<p><!-- wp:paragraph --></p>
+<p><em>Use Cases</em> form so-called application layer - set of classes/functions that exposes what our application actually does. Distilling such a layer is a first step towards better code base.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Interface / Port - second build block</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>That was just the beginning of our way to better model our business logic in code. We did that just by moving code a designated class. Even though we broke chains of the admin panel, we are still tied to Django ORM:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class WithdrawingBidUseCase:
+    def withdraw_bids(self, auction_id, bids_ids):
+        auction = Auction.objects.get(pk=auction_id)  # HERE...
+        bids_to_withdraw = Bid.objects.filter(pk__in=bids_ids)  # ...HERE...
+
+        old_winners = set(auction.winners)
+        auction.withdraw_bids(bids_to_withdraw)
+        new_winners = set(auction.winners)
+
+        self._notify_winners(new_winners - old_winners)
+        
+        auction.save()  # ...AND HERE</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>To break free from Django ORM, we are going to use another standard technique - a layer of abstraction. Judging by the way we use Django ORM in the code above, we need <em>something</em> which allows to fetch an auction by its ID and later to persist it. Given these two examples of usage, it is trivial to imagine an abstract class:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class AuctionsRepo(abc.ABC):
+    @abc.abstractmethod
+    def get(self, auction_id):
+        pass
+
+    @abc.abstractmethod
+    def save(self, auction):
+        pass</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Such abstractions which are to separate business logic from the outer world are called <em>Interfaces</em> or <em>Ports</em>. In this case, we are abstracting DB by using a specific pattern called <em>Repository</em>, but in general case, we can use the same technique to decouple from different types of dependencies, e.g. payment provider.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:quote --></p>
+<blockquote class="wp-block-quote"><p><em>Interface</em> / <em>Port</em> is to abstract away 3rd things from our business logic.</p>
+</blockquote>
+<p><!-- /wp:quote --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Interface Adapter / Adapter - third building block</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Naturally,  every abstract class has to have a concrete implementation. After all, we want our code to actually do something :) In the Clean Architecture concrete implementations of <em>Interfaces</em> / <em>Ports</em> are called <em>Interface Adapters</em> or just <em>Adapters</em>. For now, let's assume a very simple, naive implementation:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class DjangoAuctionsRepo(AuctionsRepo):
+    def get(self, auction_id):
+        return Auction.objects.get(pk=auction_id)
+
+    def save(self, auction):
+        auction.save()</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Ok, so what has really changed? <strong>The trick is to make our <em>Use Case</em> know only about <em>AuctionsRepo</em> and nothing about Django:</strong></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class WithdrawingBidUseCase:
+    def __init__(self, auctions_repo: AuctionsRepo):
+        self._auctions_repo = auctions_repo
+
+    def withdraw_bids(self, auction_id, bids_ids):
+        auction = self._auctions_repo.get(auction_id)
+
+        ...  # skipped for readability
+        
+        self._auctions_repo.save(auction_id)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Only now we are truly free from DjangoORM. Now, we could write real unit tests for <em>WithdrawingBidUseCase</em> by either passing in mocked <em>AuctionsRepo</em> or writing a simple implementation that would keep objects in memory.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><em>Some time ago, I have started a pet project to get rid of the necessity of manual writing such repositories. If you are eager to help or can you just give some feedback, feel free to open an issue/contact me: </em><a href="https://github.com/Enforcer/python_entity_framework">https://github.com/Enforcer/python_entity_framework</a></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:quote --></p>
+<blockquote class="wp-block-quote"><p>Interface Adapter / Adapter is a concrete implementation of <em>Interface</em> / <em>Port</em>. <em>Use Cases</em> MUST NOT know about <em>Interface Adapters</em> / <em>Adapters</em>, but they know <em>Interfaces</em> / <em>Ports</em>.</p>
+</blockquote>
+<p><!-- /wp:quote --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Dependency Injection</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Above example might have suggested that one has to assemble manually classes whenever they want to run a <em>Use Case</em> that depends on <em>AuctionsRepo</em>.  Luckily, this is not the case thanks to dependency injection tools, such as <a href="https://pypi.org/project/Inject/">python-inject</a> or <a href="https://pypi.org/project/injector/">injector</a>. Let's see an example of usage the former:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># somewhere in settings
+import inject
+
+def di_configuration(binder):  # 1
+    binder.bind(AuctionsRepo, DjangoAuctionsRepo())
+
+inject.configure(di_configuration)  # 2
+
+# Use Case definition leveraging DI
+class WithdrawingBidUseCase:
+    @inject.autoparams('auctions_repo')  # 3
+    def __init__(self, auctions_repo: AuctionsRepo):
+        self._auctions_repo = auctions_repo
+
+    ...
+
+# Somewhere in code
+use_case = WithdrawingBidUseCase()  # 4</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:list {"ordered":true} --></p>
+<ol>
+<li>we write a function that will configure inject's dependency injection container</li>
+<li>we run <em>inject.configure</em> to apply the configuration. IMPORTANT: we do this only once when the application starts</li>
+<li>we decorate __init__ of <em>WithdrawingBidUseCase</em> with <em>inject.autoparams</em>. It will inspect <em>__init__'</em>s signature to determine which argument it should provide</li>
+<li>from now on, we no longer have to provide an argument for auctions_repo. Of course, we can still do it to override inject.autoparams. This might be helpful in tests when we do not want to perform full-fledged <em>inject.configure</em></li>
+</ol>
+<p><!-- /wp:list --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Entity - zeroth building block</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>We are now ready to get Django's hands off our business logic completely. It is high time we replaced Django's <em>Models</em> with <em>Entities</em>. They are three key differences between Models and Entities:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li><em>Entities</em> are not aware of the database (in fact, they do not know anything about the outer world)</li>
+<li><em>Entities</em> are not just dummy containers for data. One is discouraged from changing Entities' data from outside by direct assignment. Rather, one should use methods that encapsulate <em>Entities</em>' internal structure</li>
+<li>Single Entity can represent an entire graph of objects. Auctions and their bids are a perfect example. It makes little to no sense to reason about bids without taking into consideration auction they were placed on.</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class Auction:
+    def __init__(self, id: int, initial_price: Decimal, bids: List&#91;Bid]):
+        self.id = id
+        self.initial_price = initial_price
+        self.bids = bids
+
+def withdraw_bids(self, bids_ids: List&#91;int]):
+    ...
+
+def place_bid(self, bid: Bid):
+    ...
+
+@property
+def winners(self):
+    ...</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>The most prominent benefit of lack of external dependencies is that we write pure Python here, not being constrained by database features. One can also easily test the class. However, it also means that our <em>Interface Adapter</em> / <em>Adapter</em> - <em>DjangoAuctionsRepo</em> needs to be rewritten to be able to translate from- and to- <em>Models</em>:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class DjangoAuctionsRepo(AuctionsRepo):
+    def get(self, auction_id: int) -&gt; Auction:
+        auction_model = AuctionModel.objects.prefetch_related(
+            'bids'
+        ).get(pk=auction_id)
+ 
+        bids = &#91;
+            self._bid_from_model(bid_model)
+            for bid_model in auction_model.bids.all()
+        ]
+ 
+       return Auction(
+           auction_model.id,
+           auction_model.initial_price,
+           bids
+       )</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:quote --></p>
+<blockquote class="wp-block-quote"><p>Entities are pure-Python classes that are to free our minds from modelling business rules under the constraints of databases structure.</p>
+</blockquote>
+<p><!-- /wp:quote --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Why does it work? The Dependency rule</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Writing code with the Clean Architecture building block is not everything. It is obligatory to arrange them in a specific way, by using layers (in the simplest version - four):</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"align":"center","id":351} --></p>
+<div class="wp-block-image">
+<figure class="aligncenter"><img src="{{ site.baseurl }}/assets/2019/04/sasd.png" alt="" class="wp-image-351" /><br />
+<figcaption>Basic four layers of The Clean Architecture</figcaption>
+</figure>
+</div>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>The golden rule of maintaining order here is to keep all our dependencies unidirectional. This is illustrated by horizontal arrows in the diagram above. Domain knows nothing about other layers. Application knows about Domain, but it has no clue how it is being invoked (is it API? CLI? Admin panel?) or which database is actually in use (Infrastructure).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Practically, one MUST NOT import anything from upper layer. As a consequence, any changes being made in upper layer does not force us to touch lower layers. On the other hand, if one changes Domain it is expected that Application and all other upper layers will have to adapt to the change.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>The greatest value of the project is modelled in Domain and Application. Thanks to careful decoupling from framework and the outer world, one is able to have 100% test coverage in Domain and Application.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Boundaries</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p><em>The Dependency Rule</em> not only means ban on importing anything from upper layers, but also on passing objects that do not belong to layer which receives then. In other words, we cannot pass to Application or Domain objects which are not declared there or are not part of the standard library. In practice, one has to repack data from the outer world to different structure that will be comfortable to work with in Application layer.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>The most vulnerable points are arguments list of <em>Use Cases</em>' methods. A very convenient solution is to leverage <a href="https://en.wikipedia.org/wiki/Data_transfer_object">Data Transfer Objects</a>. In Python, we have an excellent <a href="http://www.attrs.org/en/stable/">attrs</a> library (or much simpler alternative from the standard library - <a href="https://docs.python.org/3.7/library/dataclasses.html#module-dataclasses">dataclasses</a>):</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>@attr.s(auto_attribs=True)
+class WithdrawingBidRequest:
+    auction_id: int
+    bids_ids: List&#91;int]
+
+# Use Case's method is now accepting only one argument:
+class WithdrawingBidUseCase:
+    def withdraw_bids(self, request: WithdrawingBidRequest):
+        ...</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Type safety thanks to Value Objects</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Boundary between Application and outer layer is a special place.  We already know we have to pay more attention to what's passed down. Gaining certainty about types of <em>Request</em> fields would be an enormous help. Python is a dynamically typed language, so in order to achieve certainty we would have to manually check types in this place:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>assert isinstance(request.auction_id, int)
+assert all(isinstance(bid_id, int) for bid_id in request.bids_ids)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Statically typed languages are free from this little inconvenience. However, even with static typing, we are not completely from the problem. What difference does it make when we are sure that given argument is indeed a string, but we need it to be a valid IPv4 address or e-mail? Additionally, we would rather be happier without having to check every time if data is valid. Instead of passing often-meaningless strings around, we are going to use <em>Value Objects</em>:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class IpAddress:
+    def __init__(self, raw_ip_address: str):
+        # validation would be here
+        self._value = raw_ip_address
+
+    def __str__(self):
+        return self._value</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><em>Value Objects</em> have a few specific features. First of all, they are immutable - once created, cannot be changed. The only way to get <em>Value Object</em> with changed internal value is to create a new instance. Secondly, two Value Objects with identical initial arguments are to be considered indistinguishable. In other words, we consider them to be equal. Thirdly, it is not possible to construct an invalid <em>Value Object</em>. It should take care of its validation.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Example Value Objects from Python's standard library are <a href="https://docs.python.org/3.6/library/decimal.html">Decimal</a>, <a href="https://docs.python.org/3/library/datetime.html#datetime.timedelta">datetime.timedelta</a> or <a href="https://docs.python.org/3/library/uuid.html">uuid.UUID</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Is the Clean Architecture a silver bullet?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Of course not!</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Non-idiomatic framework usage</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>When one adopts the Clean Architecture, they will have to accept the fact of no longer following framework's best practices. This is especially visible with Django which is not an optimal choice for the Clean Architecture. On the other hand, Pyramid or Flask are much more flexible.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Writing more code </h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Additional abstractions have their price. In extreme cases, the code is few (2-3) times longer. Luckily, there are <a href="https://docs.python.org/3/library/typing.html">type annotations</a> which help a lot.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Often copying data between objects</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>As you could see in <em>DjangoAuctionsRepo</em> above, there is this nasty code responsible for copying data from one object to another. In order to maintain proper layers separation, one has to write such a tedious code from time to time.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Validation</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>It is not that obvious where validation should be put in the Clean Architecture. The good enough solution is to valdate <em>Request</em> classes that are passed to <em>Use Cases</em>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Overengineering</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Although the Clean Architecture is great for projects with rich domain and dozens of test cases, it might become a burden in simpler cases. Sometimes going with good old Django + DRF is the best option. On the other hand, IT projects tend to become more complicated over time. Even if the Clean Architecture seems to be an overkill in the initial stage, it might prove useful after a few weeks of development.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>When should one invest in the Clean Architecture?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Plethora of test cases</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>When user's actions have multiple possible implications and we care about checking every scenario we can think of, we would certainly appreciate how easy it is to write tests of <em>Entities</em> and <em>Use Cases</em> without bothering about a database or other stuff. <a href="https://breadcrumbscollector.tech/is-your-test-suite-wasting-your-time/">Did I mention such tests are super-fast?</a></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Deferring decisions making</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Not all decisions can be made before actual development starts. Sometimes singning contracts with 3rd parties takes months. Sometimes we require more research before we feel confident about commiting to certain solution. Sometimes we just want to switch payment provider, because a new one charges less fees.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Instead of coupling with specific solutions which we suspect may be replaced in the future, one can remain flexible thanks to <em>Ports</em> / <em>Adapters</em>. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Complex domain</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The main enemy of software engineering is complexity. According to the famous <a href="https://en.wikipedia.org/wiki/No_Silver_Bullet">No Silver Bullet - Essence and Accident in Software Engineering</a> paper, there are two types of complexity - accidental and essential.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>The former can be removed with a finite effort by refactoring, following good practices etc. The latter can not. If someone asks you to write a project with 50 features, it will be inherently complex. It does not matter how much effort you will put into making the code simpler. It will still have to implement these 50 features.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>This kind of inevitable complexity is exactly what the Clean Architecture tries to fight. It will not eliminate the complexity, but it will let you manage it.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Business requirements are factors that actually shape projects. Paying them attention they deserve will substantially benefit the quality of our project and will also help us to become better software engineers. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Where to go next?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Congratulations, you have been introduced to the Clean Architecture. However, this is just the tip of the iceberg, when it comes to software engineering.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Please check out example project for the things that were not covered in this article (like returning data from Use Cases). https://github.com/Enforcer/clean-architecture-example-1</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>&lt;shameless advert&gt;You can also check out my <a href="http://cleanarchitecture.io/">upcoming book on the Clean Architecture</a>. &lt;/shameless advert&gt;</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>For even more advanced example, checkout another repo of mine: <a href="https://github.com/Enforcer/clean-architecture">https://github.com/Enforcer/clean-architecture</a></p>
+<p><!-- /wp:paragraph --></p>

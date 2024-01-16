@@ -1,0 +1,103 @@
+---
+layout: post
+title: How to implement and use Command Bus in Python with Injector?
+date: 2021-04-04 20:01:49.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- python
+tags: []
+permalink: "/how-to-implement-and-use-command-bus-in-python-with-injector/"
+---
+<p><!-- wp:heading --></p>
+<h2>What's a command bus?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Command Bus is an incarnation of Mediator design pattern. It provides a way to decouple the code structure that sends a command to its receiver. It becomes handy with CQRS implementation with regard to the write stack. Commands are implemented as immutable data structures. It can be done with e.g. dataclasses or attrs. Command handlers are places where the logic is executed.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"align":"center"} --></p>
+<div class="wp-block-image">
+<figure class="aligncenter"><img src="{{ site.baseurl }}/assets/2021/04/SoWkIImgAStDuNBDAyhF2SjCBLVGjLC0SnIqj1Ii59ABKXDBKb6bdVDpSnFpKfnAYu4ACe2id5IDL902AuXEJIw42hXn7c1rHK0TyV79YJavyV5eUXnIyrA0BW40" alt="PlantUML diagram" /></figure>
+</div>
+<p><!-- /wp:image --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from dataclasses import dataclass
+
+@dataclass(frozen=True)
+class Enroll:
+    student_id: int
+    course_id: int
+
+
+class EnrolHandler:
+    def __call__(self, command: Enroll) -> None:
+        ...</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>The concept is straightforward and it makes it pretty simple to use the functionalities. A caller just need a command instance and a command bus. The latter calls the appropriate handler. But how does a command bus look like? How to get one?</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Which command bus to use?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Some time ago, I've wrote a little pure Python library implementing Command- and Event Buses - <a href="https://pypi.org/project/pybuses/" target="_blank" rel="noreferrer noopener">pybuses</a>. And frankly - I haven't been using it for a very long time. It is mostly because I fell in love with <a href="https://github.com/alecthomas/injector" target="_blank" rel="noreferrer noopener">injector</a> - a mature dependency injection container, modelled after Java's Guice. In the meantime, I come across a <a href="https://github.com/mr0zek/SmogFightClub" target="_blank" rel="noreferrer noopener">C# project</a> created to demonstrate the basics of modular monoliths. I found out it uses a custom Command/Event Bus implementation that leverages dependency injection container - Autofac. <a href="https://github.com/mr0zek/SmogFightClub/blob/afa26c73fd43aadb7b793f012762df08b7bfc0bf/src/SFC.Infrastructure/Bus.cs" target="_blank" rel="noreferrer noopener">The code</a> is so elegant and simple that I decided to just rewrite it using Injector. That became my personal standard.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>To start with, we need a base generic class that will be used for injector bindings configuration. Concrete handlers can inherit from it to make mypy happy.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from typing import Generic, TypeVar
+
+TCommand = TypeVar("TCommand")
+
+
+class Handler(Generic&#91;TCommand]):
+    def __call__(self, command: TCommand) -> None:
+        raise NotImplementedError</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now, using the previous example with <code>Enrol</code> command, its handler configuration would look like this:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from injector import Injector, Module, provider
+
+class EnrolHandler(Handler&#91;Enrol]):
+    def __call__(self, command: Enrol) -> None:
+        print(f"command: {command}")
+
+
+class Enrolment(Module):
+    @provider
+    def enrol_handler(self) -> Handler&#91;Enrol]:
+        return EnrolHandler()
+
+container = Injector(&#91;Enrolment()], auto_bind=False)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Why am I using a class for EnrolHandler even though it has a single method <code>__call__</code>? Because in a real world-code I'd be injecting some collaborating classes, e.g repository or some port. Command handlers have the same responsibilities as Use Cases / Interactors. If you're not sure what I am writing about, see my previous posts about <a href="https://breadcrumbscollector.tech/python-the-clean-architecture-in-2021/">the Clean Architecture</a>. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Finally, a command bus itself gets an instance of Injector and will use it to look for <code>Handler</code> of a given command.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class CommandBus:
+    def __init__(self, container: Injector) -> None:
+        self._container = container
+
+    def handle(self, command: TCommand) -> None:
+        command_cls: Type&#91;TCommand] = type(command)
+        handler = self._container.get(Handler&#91;command_cls])
+        handler(command)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>It's that simple. Aw working example can be found <a href="https://gist.github.com/Enforcer/920ecebdabb5c4b75c67bc43aac5b325">here</a>. In the project, <code>CommandBus</code> is also configured using a provider (just like <code>Handler[Enrol]</code>), so it can later be injected into views or background tasks.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Event Bus implementation is trickier because one needs to use injector's multibind. You can find a full example in my repository that contains <a href="https://github.com/Enforcer/clean-architecture/blob/master/auctioning_platform/foundation/foundation/events.py" target="_blank" rel="noreferrer noopener">example Python project written using the Clean Architecture</a>.</p>
+<p><!-- /wp:paragraph --></p>

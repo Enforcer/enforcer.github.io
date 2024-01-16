@@ -1,0 +1,201 @@
+---
+layout: post
+title: 'mypy: how to use it in my project? Part 2: automatically annotate code'
+date: 2020-03-23 14:00:00.000000000 +01:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- mypy
+- python
+- type annotations
+tags: []
+permalink: "/mypy-how-to-use-it-in-my-project-part-2-automatically-annotate-code/"
+---
+<p><!-- wp:paragraph --></p>
+<p>Even after successful integration of mypy with an existing project (see <a href="https://breadcrumbscollector.tech/mypy-how-to-use-it-in-my-project/">mypy: how to use it in my project part 1</a>), there are tons of code that does not have type annotations. Adding them manually is an unimaginable amount of work. We may do it gradually (as suggested in part 1) or use tools to help us.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Using PyCharm to get type annotations</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>This recipe requires you to use PyCharm and have tests written for your code. Assuming that's your code:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>async def websocket_handler(request):
+    ws = web.WebSocketResponse()
+    await ws.prepare(request)
+
+    async for msg in ws:
+        if msg.type == WSMsgType.TEXT:
+            data = msg.json()
+            await ws.send_json(
+                {
+                    'message': data['message'],
+                    'from': data['from'],
+                    'timestamp': time.time()
+                }
+            )
+        elif msg.type == WSMsgType.ERROR:
+            logger.error('ws connection closed with exception %s' % ws.exception())
+
+    return ws</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>...and there goes a test for it:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>async def test_receives_sent_message(aiohttp_client):
+    client = await aiohttp_client(create_app)
+    connection = await client.ws_connect('/ws?nickname=JohnDoe')
+
+    message = 'Hello, world!'
+    example_payload = {'message': message, 'from': 'JohnDoe', 'timestamp': 0}
+    await connection.send_json(example_payload)
+    response = await connection.receive_json()
+
+    assert response['message'] == message</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>This is a WebSocket view for chat application. It comes from my <a href="https://github.com/Enforcer/asyncio-workshop">asyncio-tutorial</a> from 2017 edition of PyconPL. This proto-chat just sends back everything one has sent to it.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now, to get type annotations you have to first enable collecting run-time types information. In order to do so, open <strong>Settings</strong>, go to <strong>Build, Execution, Deployment</strong> and open <strong>Python Debugger</strong> page. There, turn on the option labelled as <strong>Collect run-time types information for code insight</strong>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"id":500,"sizeSlug":"large"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2020/03/Zrzut-ekranu-z-2020-03-21-16-39-05.png?fit=676%2C244&amp;ssl=1" alt="" class="wp-image-500" /></figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>Then, navigate to your tests and run them under the debugger. In my case, I have only a single test, so I will simply run it using UI:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"id":501,"sizeSlug":"large"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2020/03/Zrzut-ekranu-z-2020-03-21-16-42-44.png" alt="" class="wp-image-501" /></figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>The next step is to go back to your code, select a code element (e.g. view function) by single-clicking it and press a key shortcut (Alt + Enter on Linux). Then, click first option <strong>Add type hints for function 'websocket_handler'</strong>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"id":502,"sizeSlug":"large"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2020/03/Zrzut-ekranu-z-2020-03-21-16-45-19.png" alt="" class="wp-image-502" /></figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>Voilà, type annotations appear:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>async def websocket_handler(request: aiohttp.web_request.Request) -> Union[_asyncio.Future, aiohttp.web_ws.WebSocketResponse]:
+    ...</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>In case you forgot to run your tests with debugger or run-time type information has not been collected, PyCharm would just add "object" for both argument and return type. If this happens to you, recheck settings and remember to run tests from PyCharm using debug!</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>It is not over yet - you still have to clean this thing up a bit by removing the excessive information and adding missing imports or fixing paths. In this particular example, the first element of Union is not particularly helpful, so we remove it and just leave WebSocketResponse there. As for paths, both Request and WebSocketResponse are also imported to aiohttp.web which we imported in the module, so we can just change annotations and shorten the whole thing:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from aiohttp import (
+    web,
+    WSMsgType,
+)
+
+
+async def websocket_handler(request: web.Request) -> web.WebSocketResponse:
+    ...</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>...and we are now good to go :) Don't forget to run mypy afterwards and see if it finds any issues! </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Why this approach will never be as good as manual annotation?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Although having <em><a href="https://mypy.readthedocs.io/en/stable/kinds_of_types.html#the-any-type">any</a></em> type hints (pun intended) seems to make a great change, you have to aware of caveats of such generation. Automatic tools are doing their best, but won't be able to annotate code with more generic information. Consider the following example:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>def get_top_3(iterable):
+    sorted_items = sorted(iterable, reverse=True)
+    return sorted_items[:3]
+
+
+def test_foo_dict():
+    iterable = {1: 'Jack', 2: 'Janine', 0: 'John', 3: 'Mark'}
+    assert get_top_3(iterable) == [3, 2, 1]
+
+
+def test_foo_tuple():
+    iterable = 'Jack', 'Janine', 'John', 'Mark', 'Peter'
+    assert get_top_3(iterable) == ['Peter', 'Mark', 'John']
+
+
+def test_foo_list():
+    iterable = list(range(10))
+    assert get_top_3(iterable) == [9, 8, 7]</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>As you can see, get_top_3 function can really work with any iterable object. But when we run these tests under the debugger and try to generate annotations, we get:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from typing import Dict, List, Tuple, Union
+
+def get_top_3(iterable: Union[Dict[int, str], Tuple[str, str, str, str, str], List[int]]) -> Union[List[int], List[str]]:
+    sorted_items = sorted(iterable, reverse=True)
+    return sorted_items[:3]</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>That looks terrible, but should not really surprise us. PyCharm did its best by combining types from all possible combinations but the result is very, very specific. The funniest part is how Tuple[str, str, str, str] appeared. It means that this particular annotation tells us the function will accept a tuple of strings that has exactly 4 elements, but definitely not if a tuple has 2 or 5 elements. Also, pay attention that return type has been generated in a wrong way - mypy 0.770 complains about it:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><code>tests.py:22: error: Incompatible return value type (got "List[object]", expected "Union[List[int], List[str]]")</code></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Using Generics</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>However, using our Python superpower we know that this function can accept anything that supports iteration over its elements (defines __iter__ function) and it has items that are comparable so we can sort it. To know which generic should be used here, we go to <a href="https://docs.python.org/3/library/typing.html">typing module documentation</a>. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>The one we are looking for is <em>Iterable</em>. For return type it is simpler - it is always a list:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>def get_top_3(iterable: Iterable) -> List:
+    sorted_items = sorted(iterable, reverse=True)
+    return sorted_items[:3]</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now, we are not done yet. Generics can be parametrized. It's nice to know that we will get a list, but we do not know what will be types of elements. The same goes for <em>Iterable</em>. This generic alone gives no clue if this function will work with a list of dictionaries or not (spoiler: it will crash miserably, because dictionaries cannot be compared for sorting purposes). In order to protect ourselves from it, we need to parametrize our generics. Let's break this down. We know that elements of resultant list will have the same type as elements we iterate. For that purpose, there is a generic <em>typing.TypeVar</em>:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>T = TypeVar('T')
+
+
+def get_top_3(iterable: Iterable[T]) -> List[T]:
+    sorted_items = sorted(iterable, reverse=True)
+    return sorted_items[:3]</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>This is already nice because now our IDE or mypy is able to tell what's the type of each element in response. It is done automatically. E.g. if we pass an iterable of strings, it knows we return a list of strings. If we passed a tuple of integers, we would expect a list of integers back.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"id":506,"sizeSlug":"large"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2020/03/Zrzut-ekranu-z-2020-03-21-17-30-37.png" alt="" class="wp-image-506" /></figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>This is a huge help for mypy and other static code analysis tools.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now, the final problem is that haven't conveyed requirement about elements types - they have to be comparable with each other. Unfortunately, at the moment of writing this article, there is nothing included in the stdlib that could be used to annotate comparability. I also was unable to find a reliable workaround, so that area remains uncovered. Hopefully, I will update the article in the future with relevant information :)</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Other tools worth checking out</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li><a href="https://pypi.org/project/MonkeyType/">MonkeyType from Instagram</a></li>
+<li><a href="https://github.com/dropbox/pyannotate">pyannotate from Dropbox</a></li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Although the automatic generation of Python type hints is not ideal, it can still spare you some mundane work. Stay tuned for part 3, where we will explore kick-ass tools that leverage type hints!</p>
+<p><!-- /wp:paragraph --></p>

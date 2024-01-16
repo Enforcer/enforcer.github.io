@@ -1,0 +1,351 @@
+---
+layout: post
+title: Beware of chicken testing! (or mocks overuse)
+date: 2020-04-17 15:00:00.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- good practices
+- python
+- software engineering
+- testing software
+tags: []
+permalink: "/beware-of-chicken-testing-or-mocks-overuse/"
+---
+<p><!-- wp:heading --></p>
+<h2>Need for mocking</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Dealing with problematic dependencies is an indispensable part of software testing. Often, we cannot or do not want to rely on 3rd party service/network communication/hard drive etc., especially in unit-tests. The reasons vary; external dependencies are usually slow, fallible and difficult to put into the expected state before the actual test. Consider the following code snippet (simplified - no logger, no saving to database etc): </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class FlightService:
+    ...
+
+    def book(self, params: BookingParams) -> None:
+        try:
+            payment_ref = self.payment_provider.authorize(params.confirmed_price)
+        except AuthorizePaymentFailed:
+            return
+
+        try:
+            self.flights_booking_provider.book(params.booking_token)
+        except BookingFailed:
+            self.payment_provider.cancel(payment_ref)
+        else:
+            self.payment_provider.capture(payment_ref)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>...and think how would you test it, assuming that using external services is not an option.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>There is no other way but to use so-called test doubles - objects replacing real implementations in tests. Let's use Mocks from the standard library:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>def test_let_mew_write_about_test_names_later():
+    payment_provider = Mock(spec_set=PaymentProvider)
+    flights_booking_provider = Mock(spec_set=FlightsBookingProvider)
+    service = FlightService(payment_provider, flights_booking_provider)
+
+    service.book(...)
+
+    # we can make some assertions!</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>If you do not feel you're comfortable with mocks yet or <em>spec_set</em> surprises you, check out my <a href="https://breadcrumbscollector.tech/how-to-mock-in-python-almost-definitive-guide/">(almost) definitive guide about mocking in Python</a> (are you up to date with novelties introduced in Python 3.7 and 3.8, like sealing or unsafe parameter?).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>So we should be good to go and safe, right? No.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>How Mock can betray you?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The most basic problem with Mock-based tests is that they can give you passing tests even though the code won't work in QA/Staging/Production environment. It is simply because they are not the same implementation. Even if you are using rigorous <em>spec_set</em> and sealing, Mocks still can still give you a thrill of "excitement" by letting you fall into two specific problems.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Returning value different than mocked implementation</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Often as a result of a human mistake of misconfiguring mocks, but this is dangerous because can propagate and waste your time:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class PaymentProvider:
+    def authorize(self, amount: Money) -> str:
+        ...
+
+mocked_payment_provider = Mock(
+    spec_set=PaymentProvider, authorize=Mock(return_value=True)
+)
+mocked_payment_provider.authorize(Money('$10.0'))  # will return bool even though actual implementation will return string.
+</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Calling methods with wrong parameters</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>That involves calling it with no parameters when it needs some, with wrong types or with a wrong number of parameters (too many or too little).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class FlightsBookingProvider:
+    def book(self, token: str) -> None:
+        ...
+
+mocked_flights_booking_service = Mock(spec_set=FlightsBookingProvider)
+
+mocked_flights_booking_service.book()  # no arguments, but mock is fine with it</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>type checking is the only reliable solution</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The only reliable way (that won't bite you in the future) is to use type annotations and mypy. If you wonder where to start with it, see my blog posts <a href="https://breadcrumbscollector.tech/category/mypy/">How to use mypy in my project</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>However, a misused solution for the second problem is to make pedantic assertions about all calls:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>def test_not_so_good():
+    params = BookingParams(booking_token='booking_token', confirmed_price=Money('$10.0'))
+    dummy_payment_ref = 'PAYMENT_REF'
+
+    payment_provider = Mock(
+        spec_set=PaymentProvider,
+        authorize=Mock(return_value=dummy_payment_ref)
+    )
+    flights_booking_provider = Mock(spec_set=FlightsBookingProvider)
+    service = FlightService(payment_provider, flights_booking_provider)
+
+    service.book(params)
+
+    payment_provider.authorize.assert_called_once_with(params.confirmed_price)
+    flights_booking_provider.book.assert_called_once_with(params.booking_token)
+    payment_provider.capture.assert_called_once_with(dummy_payment_ref)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:image {"align":"center","id":705,"sizeSlug":"large"} --></p>
+<div class="wp-block-image">
+<figure class="aligncenter size-large"><img src="{{ site.baseurl }}/assets/2020/04/mockedyourself.png" alt="" class="wp-image-705" /></figure>
+</div>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>Don't get me wrong, making assertions about the way mock was called is bad only in certain circumstances. After all, it is essential to interaction-based testing. But that's also a slippery slope. Luckily, there are many other red flags...</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>...when mocking goes too far</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Overspecification</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>If tests are making too many assertions about implementation details we're dealing with a classic overspefication. In other words, a code under test is literally duplicated in the test. It makes refactoring really hard because whenever you do some slight change, dozens of tests start failing. The same goes for testing private methods.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Regarding the most recent example, when you make an assertion about the way a collaborator object (e.g. payment provider or flights booking service) was called, you introduce a coupling. It will not be an overspecification only if the interface is stable (i.e. is not subjected to change in any foreseeable future)</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Mocks returning mocks that return even more mocks</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>That should speak for itself. Something is very, very wrong with the code you're trying to test. Such multi-level mocking is just a hack.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Multiple mocks/patches at once</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>When you see or write a code like this</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>@patch('mymodule.someothermodule.AyClass')
+@patch('mymodule.someothermodule.BeClass')
+@patch('othermodule.yetanothermodule.CeClass')
+@patch('thirdpartymodule.DeClass')
+@patch('thirdpartymodule.EeClass')
+def test_mocks_nonsense(ay_class, be_class, ce_class, de_class, ee_class):
+    ...</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>it may indicate that either the code is not unit-testable or it needs an integration test instead. There's no good in hacking your tests by mocking half of the codebase (including 3rd party libraries).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Multiple assertions against different mocks in the same test</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>    payment_provider.authorize.assert_called_once_with(params.confirmed_price)
+    flights_booking_provider.book.assert_called_once_with(params.booking_token)
+    payment_provider.capture.assert_called_once_with(dummy_payment_ref)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>That's a classic example of mocking too hard. Naturally, a developer still needs to use a test-double instead of dependency, but they end up with tests that:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>are very difficult to name precisely</li>
+<li>can fail for a various reasons</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>Ideally, each of your tests should fail for only one reason. When you have multiple assertions against different mocks, it's no longer a case.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Meet stubs</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Luckily, there is a relatively easy way out. Mock is merely one of few types of test-doubles. The one I want to bring your attention to is called stub.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>A stub is an object that just like a mock can be used instead of a real implementation. Stubs return hardcoded data but one must not do any assertions about the way they were called.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class PaymentProvider:
+    def authorize(self, amount: Money) -> str:
+        ...
+
+
+class PaymentProviderFailingStub(PaymentProvider):
+    def authorize(self, _amount: Money) -> str:
+        raise AuthorizePaymentFailed
+
+
+def test__book_flight__payment_failed__booking_provider_not_called(): 
+    payment_provider = PaymentProviderFailingStub()
+    flights_booking_provider = Mock(spec_set=FlightsBookingProvider)
+    service = FlightService(payment_provider, flights_booking_provider)
+
+    params = BookingParams(booking_token='booking_token', confirmed_price=Money('$10.0'))
+    service.book(params)
+
+    flights_booking_provider.book.assert_not_called()</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>In our test, we once again mock <em>FlightsBookingProvider</em> (because we will be making an assertion about its book method) but instead of <em>PaymentProvider</em> we pass a stub - <em>PaymentProviderFailingStub</em>. It is a simple class that always raises an exception. The stub is not to be used in assertions. It is meant to make it easier to test our code under test (FlightService.book) UNDER CONDITION that payment authorization fails. This shift in thinking allows our tests to be more focused. As a result, they are much easier to name and are also more stable, by failing only for one reason.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>If you are a proficient user of Python Mocks, you already noticed that it is actually not necessary to write a class for each stub. You could as well create a Mock and specify <em>side_effect</em>:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>def test__book_flight__payment_failed__booking_provider_not_called(): 
+    payment_provider = Mock(  # still a stub
+        spec_set=PaymentProvider,
+        authorize=Mock(side_effect=AuthorizePaymentFailed)
+    )
+    flights_booking_provider = Mock(spec_set=FlightsBookingProvider)
+    service = FlightService(payment_provider, flights_booking_provider)
+
+    params = BookingParams(booking_token='booking_token', confirmed_price=Money('$10.0'))
+    service.book(params)
+
+    flights_booking_provider.book.assert_not_called()</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Even though we use Mock, <em>payment_provider</em> test-double is technically still a stub, as long as we do not make any assertions about it. So what makes a test-double stub or a mock, is a way how we use it. Perhaps naming class Mock was not the best choice, but now that's just random rant. :)</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>I believe in the majority of cases using Mock class to create stubs instead of a hand-written class is good enough unless a class looks cleaner to you and your colleagues. A hand-written class has an advantage of being stricter about arguments passed to functions calls, but mypy gives you the same advantage. Plus it would be required anyway to make sure your stub does not violate <a href="https://en.wikipedia.org/wiki/Liskov_substitution_principle">Liskov substitution principle</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Again, given capabilities of Python standard library Mock, stubbing is mostly a shift in thinking. One way to make sure it's not lost is to remember about one rule.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Only one mock per test allowed (let the rest be stubs)</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Do not verify more than one test-double using Mock in a single test. That enables creation of much more focused, much cleaner tests:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>@pytest.fixture()
+def booking_params() -> BookingParams:
+    return BookingParams('xdxdxdxd', Money('$10.0'))
+
+
+@pytest.fixture()
+def payment_provider() -> PaymentProvider:
+    return Mock(spec_set=PaymentProvider)
+
+
+@pytest.fixture()
+def flights_booking_provider() -> FlightsBookingProvider:
+    return Mock(spec_set=FlightsBookingProvider)
+
+def test_book_flight__authorize_payment_failed__booking_service_not_called(
+    payment_provider: PaymentProvider,
+    flights_booking_provider: FlightsBookingProvider,
+    booking_params: BookingParams
+) -> None:
+    # dependency               | test double type
+    # ---------------------------------------------
+    # flights_booking_provider | mock
+    # ---------------------------------------------
+    # payment_provider         | stub
+    service = FlightService(payment_provider, flights_booking_provider)
+    payment_provider.authorize.side_effect = AuthorizePaymentFailed
+
+    service.book(booking_params)
+
+    flights_booking_provider.book.assert_not_called()
+
+
+def test_book_flight__booking_failed__cancel_payment_called(
+    payment_provider: PaymentProvider,
+    flights_booking_provider: FlightsBookingProvider,
+    booking_params: BookingParams
+) -> None:
+    # dependency               | test double type
+    # ---------------------------------------------
+    # flights_booking_provider | stub
+    # ---------------------------------------------
+    # payment_provider         | mock
+    service = FlightService(payment_provider, flights_booking_provider)
+    flights_booking_provider.book.side_effect = BookingFailed
+
+    service.book(booking_params)
+
+    payment_provider.cancel.assert_called()
+
+
+def test_book_flight__booking_successful__capture_called(
+    payment_provider: PaymentProvider,
+    flights_booking_provider: FlightsBookingProvider,
+    booking_params: BookingParams
+) -> None:
+    # dependency               | test double type
+    # ---------------------------------------------
+    # flights_booking_provider | stub
+    # ---------------------------------------------
+    # payment_provider         | mock
+    service = FlightService(payment_provider, flights_booking_provider)
+
+    service.book(booking_params)
+
+    payment_provider.capture.assert_called()</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>requests stubbing</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The idea of stubbing plays very nicely with external services that we use by calling their API. Making assertions whether we called the right endpoint is like... <em>meh</em>. You can kill two birds with one stone - write a stub that will only respond to the expected URL and focus on testing what your code does, given the stubbed response. This can be called a self-verifying mock, it will fail if code under test requests other URL.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>This can be both achieved with <a href="https://github.com/getsentry/responses">responses</a> or <a href="https://requests-mock.readthedocs.io/en/latest/">request-mock</a> libraries. Also, see this <a href="https://t.co/XqXfFLEZqr?amp=1">recipe for aiohttp</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Stubs have yet another magic feature - when your starting point is predictable behaviour of dependencies, you start thinking more about valuable testing. Focus is shifted on the code under test. Your end goal is to verify a particular code fragment by checking WHAT it does under specific conditions. Not HOW EXACTLY it does that.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Further reading</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li><a href="https://osherove.com/blog/2005/4/3/naming-standards-for-unit-tests.html">Naming standards for unit-tests</a></li>
+<li><a href="https://martinfowler.com/articles/mocksArentStubs.html">Mocks Aren't Stubs</a></li>
+<li><a href="http://natpryce.com/articles/000356.html">State vs Interaction Based Testing Example</a></li>
+<li><a href="https://github.com/kevin1024/vcrpy">https://github.com/kevin1024/vcrpy</a></li>
+<li><a href="https://testandcode.com/102">https://testandcode.com/102</a></li>
+<li><a href="https://requests-mock.readthedocs.io/en/latest/">https://requests-mock.readthedocs.io/en/latest/</a></li>
+</ul>
+<p><!-- /wp:list --></p>

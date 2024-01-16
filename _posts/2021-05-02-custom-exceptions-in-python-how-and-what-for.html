@@ -1,0 +1,168 @@
+---
+layout: post
+title: Custom exceptions in Python - how and what for?
+date: 2021-05-02 17:51:53.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- python
+tags: []
+permalink: "/custom-exceptions-in-python-how-and-what-for/"
+---
+<p><!-- wp:paragraph --></p>
+<p>Exceptions are a standard way of signalling errors in Python. If you have ever written some code in this language, I bet you saw at least a couple of them. :) Python has quite a few built-in exception classes for all occasions. For example, there's ZeroDivisionError raised when you try to divide by zero. Or ValueError raised on many occasions - also when you try to convert a string to an integer that doesn't look like one:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:enlighter/codeblock --></p>
+<pre class="EnlighterJSRAW" data-enlighter-language="generic" data-enlighter-theme="" data-enlighter-highlight="" data-enlighter-linenumbers="" data-enlighter-lineoffset="" data-enlighter-title="" data-enlighter-group="">1 / 0  # doomed to fail
+# Traceback (most recent call last):
+#  File "&lt;stdin>", line 1, in &lt;module>
+# ZeroDivisionError: division by zero
+
+int("Python")  # can't do this
+# Traceback (most recent call last):
+#  File "&lt;stdin>", line 1, in &lt;module>
+# ValueError: invalid literal for int() with base 10: 'Python'</pre>
+<p><!-- /wp:enlighter/codeblock --></p>
+<p><!-- wp:paragraph --></p>
+<p>Exceptions can be handled using <code>try..except</code> block. With aforementioned examples that's pretty simple to imagine:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:enlighter/codeblock --></p>
+<pre class="EnlighterJSRAW" data-enlighter-language="generic" data-enlighter-theme="" data-enlighter-highlight="" data-enlighter-linenumbers="" data-enlighter-lineoffset="" data-enlighter-title="" data-enlighter-group="">from datetime import timedelta, date
+
+
+while True:
+    try:
+        year_of_birth = int(input("Enter your year of birth and I'll tell you how old are you!"))
+    except ValueError as exc:
+        print("Invalid value! Try again.")
+
+    break
+
+...  # rest ommitted, non-essential for the blog post</pre>
+<p><!-- /wp:enlighter/codeblock --></p>
+<p><!-- wp:heading --></p>
+<h2>Did you know you could handle SyntaxError?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>What may be surprising, situations like the inability to import an object (<code>ImportError</code>), handling CTRL+C (or CMD+C on MacOS) - <code>KeyboardInterrupt</code> or even wrong syntax - <code>SyntaxError</code> are also signalled through exceptions. This means you can catch them</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:enlighter/codeblock --></p>
+<pre class="EnlighterJSRAW" data-enlighter-language="generic" data-enlighter-theme="" data-enlighter-highlight="" data-enlighter-linenumbers="" data-enlighter-lineoffset="" data-enlighter-title="" data-enlighter-group="">try:
+    eval("""
+    def syntactically_wrong_function(): this syntax does not exist
+    """)
+except SyntaxError as exc:
+    print("Oh no!", exc)</pre>
+<p><!-- /wp:enlighter/codeblock --></p>
+<p><!-- wp:paragraph --></p>
+<p>I don't recommend doing so. However, handling <code>ImportError</code> is quite a common pattern in libraries to handle optional dependencies. For example, <a href="https://docs.aiohttp.org/en/stable/">aiohttp</a> has several optional dependencies, e.g. cchardet or brotli. <a href="https://github.com/aio-libs/aiohttp/blob/f2afa2f/aiohttp/http_parser.py#L44">See handling presence or absence of dependency here</a>. The same approach could be used to handle differences between Python 2 and 3 - some modules were moved.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>I don't encourage you to catch <code>SyntaxError</code> but be aware that Python is consistent when it comes to handling errors. It's very convenient! <a href="https://docs.python.org/3/library/exceptions.html#exception-hierarchy">Here's a full exceptions hierarchy</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Should you add custom exceptions?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Creating a new exception is trivial - just subclass <code>Exception</code> class:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:enlighter/codeblock --></p>
+<pre class="EnlighterJSRAW" data-enlighter-language="generic" data-enlighter-theme="" data-enlighter-highlight="" data-enlighter-linenumbers="" data-enlighter-lineoffset="" data-enlighter-title="" data-enlighter-group="">class MyCustomError(Exception):
+    pass</pre>
+<p><!-- /wp:enlighter/codeblock --></p>
+<p><!-- wp:paragraph --></p>
+<p>Many libraries choose to allow you for precise error handling, e.g. <a href="https://docs.python-requests.org/en/master/_modules/requests/exceptions/">requests</a> or <a href="https://docs.sqlalchemy.org/en/14/orm/exceptions.html">sqlalchemy</a>. If you delve into the source code, you'll see that their custom exceptions follow Python's conventions. For instance, <code>HTTPError</code> from requests inherits from built-in <code>IOError</code>. Also, exceptions classes bundled with libraries follow naming schema by adding "Error" suffix. The bottom line is that without custom exceptions you would not be able to effectively do any error handling with 3rd party libraries. Built-in exceptions are already used in the standard library, so if you would try to handle IOError, you wouldn't easily know if you are handling HTTP request failure or a problem with reading a file from a hard drive.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>So the answer to question whether you should add custom exceptions is yes.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Expressiveness thanks to custom Python exceptions</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>If by any chance you are writing code that fulfils business requirements, custom exceptions can make the code cleaner, self-explanatory and more intention-revealing. Consider the following project:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:quote --></p>
+<blockquote class="wp-block-quote"><p><em>An auction allows bidders to compete for an item. Auction has some starting price to encourage bidders and secure against giving item away for very little money. Bidders place bids. If a bid is bigger than current price (inititally equal to starting price), then a bid's amount becomes new current price and a bidder becomes a winner. If a new bid is lower than current price, no change is made to the auction and bid is rejected. Auction lasts until moment of time specified when an auction was started.</em></p>
+</blockquote>
+<p><!-- /wp:quote --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now read that again and think what's the happy path. After that, think about all cases when something may go wrong... and write it as exceptions classes! My propositions:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:enlighter/codeblock --></p>
+<pre class="EnlighterJSRAW" data-enlighter-language="generic" data-enlighter-theme="" data-enlighter-highlight="" data-enlighter-linenumbers="" data-enlighter-lineoffset="" data-enlighter-title="" data-enlighter-group="">class BidOnEndedAuctionError(Exception):
+    pass
+
+class BidLowerThanCurrentPriceError(Exception):
+    pass
+
+class AlreadyAWinnerError(Exception):
+    pass</pre>
+<p><!-- /wp:enlighter/codeblock --></p>
+<p><!-- wp:paragraph --></p>
+<p>While exceptions like <code>HTTPError</code> or <code>ZeroDivisionError</code> are very technical, <code>BidOnEndedAuctionError</code> is a completely different kind - so-called <em>domain exception</em>. This type of errors belongs to the domain language of the project. Hence, we can use them in conversations with users and stakeholders and be well-understood.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>For convenience, I encourage you to introduce a common base exception class for this type of errors:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:enlighter/codeblock --></p>
+<pre class="EnlighterJSRAW" data-enlighter-language="generic" data-enlighter-theme="" data-enlighter-highlight="" data-enlighter-linenumbers="" data-enlighter-lineoffset="" data-enlighter-title="" data-enlighter-group="">class DomainException(Exception):
+    pass
+
+class BidOnEndedAuction(DomainException):
+    pass</pre>
+<p><!-- /wp:enlighter/codeblock --></p>
+<p><!-- wp:paragraph --></p>
+<p>...and optionally, strip "Error" suffix. It doesn't add much value, really.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>What can you do with domain exceptions?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Obviously, you can catch and handle them whenever this is needed. However, remember about one rule about dealing with exceptions:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:quote --></p>
+<blockquote class="wp-block-quote"><p>Catch exceptions only when you can do something about them</p>
+</blockquote>
+<p><!-- /wp:quote --></p>
+<p><!-- wp:paragraph --></p>
+<p>If you cannot handle the exception, let it go through. At least you'll get a much clearer error message. In fact, not only you - often domain exceptions can be safely shown to users. Recently, I've been working on a project with GraphQL with graphene-python and FastAPI. Handling errors there is a bit problematic - by default, the exception's message is returned on the API. It can leak database errors (or worse password or who knows what other sensible information). To mitigate this risk, I introduced <code>DomainException</code> base class. On the API, I only show messages of exceptions that inherit from that class. For others, I return a generic message and report to Sentry.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Catching exceptions just to silence them is super evil and gonna bite you sooner or later. Don't do that.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>If you are writing <a href="https://breadcrumbscollector.tech/the-clean-architecture-in-python-how-to-write-testable-and-flexible-code/">Pythonic code using the Clean Architecture</a>, then custom domain exceptions are an absolute must :)</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>How to avoid falling victim to defensive programming?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>"But Sebastian, what about all those errors that CAN happen? How can you sleep at night without explicitly handling all possible errors?!"</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><strong>I choose not to.</strong> And I recommend you do the same.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>This is not C, where a simple mistake can lead to memory access violation and killing the entire program by an operating system. I've been there, done that. In C, a more defensive programming style is justified. But we're talking about Python.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>First of all, recall the rule of catching exceptions - do that only if you can do something about it. If not - let it through. Even if you do nothing, in 99% of cases it will be handled higher, especially if you use some kind of a framework. There will be an HTTP 500 error, but no casualties. You should also have some error reporting like Sentry to notify you about it. You won't be able to foresee all possible errors anyway.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Obviously, there is a type of errors that even the framework cannot reasonably handle. But then there is a bigger issue and STILL, you cannot do anything in your code about it.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>So don't worry and enjoy your custom exceptions in Python :) </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Further reading</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>https://docs.python.org/3/tutorial/errors.html</li>
+</ul>
+<p><!-- /wp:list --></p>

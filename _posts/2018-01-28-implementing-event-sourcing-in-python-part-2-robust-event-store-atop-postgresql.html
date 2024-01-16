@@ -1,0 +1,373 @@
+---
+layout: post
+title: Implementing Event Sourcing in Python - part 2, robust event store atop PostgreSQL
+date: 2018-01-28 15:29:29.000000000 +01:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- event sourcing
+- python
+tags: []
+permalink: "/implementing-event-sourcing-in-python-part-2-robust-event-store-atop-postgresql/"
+---
+<p><em>This post is a part of <a href="https://breadcrumbscollector.tech/category/event-sourcing/">Implementing Event Sourcing</a> series. It consists of code snippets, thoughts and practical advice how to implement ES in your own project. The contents of this post will probably make most sense if you also read all other parts. Then you should be ready to use it in your own projects.</em></p>
+<h2>Where all those events go?</h2>
+<p>Being able to restore <a href="https://breadcrumbscollector.tech/implementing-event-sourcing-in-python-part-1-aggregates/">aggregate</a>'s state from an event stream is a good starting point. Next step is to think how we are going to store and retrieve event streams. So far, we can imagine a abstract base class:</p>
+<pre class="lang:default decode:true">class EventStore(metaclass=abc.ABCMeta):
+
+    @abc.abstractmethod
+    def load_stream(self, aggregate_uuid: uuid.UUID) -&gt; EventStream:
+        pass
+
+    @abc.abstractmethod
+    def append_to_stream(
+            self,
+            aggregate_uuid: uuid.UUID,
+            expected_version: typing.Optional[int],
+            events: typing.List[Event]
+    ) -&gt; None:
+        pass
+</pre>
+<p><em>load_stream</em> method will return EventStream instance, simple data structure with list of events needed for aggregate's initialization and current aggregate's <em>version</em>:</p>
+<pre class="lang:default decode:true">class EventStream:
+    events: typing.List[Event]
+    version: int
+
+    def __init__(self, events, version):
+        ...</pre>
+<p>We will use <em>version</em> to protect against concurrent updates using optimistic locking. <em>append_to_stream</em> method accepts <em>aggregate_uuid</em>, <em>expected_version</em> (the one we obtained from <em>load_stream</em>) and a list of events our aggregate produced. Please note that we do not have to store old events, only new ones. This is possible because we are not allowed to delete any events ever, so this is append-only structure.</p>
+<p>Aforementioned expected_version parameter serves for protection against concurrent updates. If such a situation occurs, this method should raise an exception:</p>
+<pre class="lang:python decode:true">class ConcurrentStreamWriteError(RuntimeError):
+    pass</pre>
+<p>Implementation details depend on chosen database engine.</p>
+<p>Another important question, what database should be used? Some people state that almost any is fine. I find it hardly a valid answer. Is transactional database like MySQL a good choice? What to pay attention to? To precisly answer this question, one has to consider nature of events stream and how they are used to reconstruct aggregates.</p>
+<h3>Retrieve strategy</h3>
+<p>To rebuild an aggregate we need all events that were ever emitted by it. Our aggregates will usually have unique ID being UUID. So in other words, we should be able to query our event store by aggregate's ID. This requirement can be easily met by many substantially varying database engines. Few examples:</p>
+<h3>Redis</h3>
+<p>This is a popular data-structure DB that can store data in few handy structures, such as:</p>
+<ul>
+<li>strings</li>
+<li>lists</li>
+<li>sets</li>
+<li>sorted sets</li>
+<li>hashes (also known as dictionaries or maps)</li>
+</ul>
+<p>Assuming Redis is our choice, we would store events using lists and use aggregate's UUID as part of key name. To retrieve all events for given UUID, we would use a following query:</p>
+<pre class="lang:default decode:true ">LRANGE event_stream_f42d9a33-81da-45ba-a066-32de5e747067 0 -1</pre>
+<p>WARNING: Redis' implementation of lists causes such queries to lower performance linearly with an increase of a number of events for the given aggregate. <a href="https://redis.io/commands/lrange">See time complexity section</a>.</p>
+<h3>RDBMS (PostgreSQL, MySQL etc)</h3>
+<p>A natural way of modelling event stream using RDBMS is to create a table for all of them. Although we are going to store many types of events with different fields, it is not feasible to create a separate table for each one. Firstly, performance of querying will suffer. Secondly, it will make queries more complicated to implement and maintain. Thirdly, events may evolve over time, including additional data. Of course we can not change events from the past, but somehow we would have to store new ones with altered structure alongside old ones. So staying with one-table-for-all-events design is a right thing to do:</p>
+<pre class="lang:default decode:true">Events
+---------------------------------------
+| uuid | aggregate_uuid | name | data |
+---------------------------------------</pre>
+<p>Each event has also it's own <em>uuid</em>. <em>aggregate_uuid</em> is a column allowing us for easily querying by it. <strong>We should put an index on it</strong>. <em>name</em> is self explanatory (OrderCreated, CashDeposited etc). Finally, we have a flexible part - data. We will store JSON-encoded details inside. Depending on a chosen database engine, we would use dedicated data type (PostgreSQL supports JSON columns) or simply TEXT.</p>
+<p>Querying itself is trivial:</p>
+<pre class="lang:default decode:true">SELECT * FROM events WHERE aggregate_uuid = 'f42d9a33-81da-45ba-a066-32de5e747067';</pre>
+<h3>Document-oriented (MongoDB, RethinkDB etc)</h3>
+<p>Analogously to RDBMS, we should be able to use single collection (MongoDB) or table (RethinkDB) to retrieve all events. Beside data json part, we would also add aggregate_uuid and put an index on it for faster reads.</p>
+<p>Querying is also very simple:</p>
+<pre class="lang:default decode:true">db.events.find(
+    {aggregate_uuid: 'f42d9a33-81da-45ba-a066-32de5e747067'}
+)  # MongoDB
+
+r.table('events').get_all(
+    'f42d9a33-81da-45ba-a066-32de5e747067', index='aggregate_uuid'
+).run()  # RethinkDB</pre>
+<h3>Store strategy</h3>
+<p>As I have already mentioned, we never delete events. Event Sourcing does not limit an amount  of events by aggregte, so we should be prepared that our events table/collection will grow indefinitely. Therefore, we need a database that is able to scale and maintain approximate read/write times regardless of number of events (up to some extent, of course).</p>
+<p>Events are our source of truth, so we can not afford any data loss. Thus, we need a database with strong consistency guarantees.</p>
+<p>Event sourcing assumes that only one aggregate should be saved within one business operation. Saving single aggregate has to be atomic. We do not need to have full-fledged all-or-nothing guarantee as it is with relational SQL databases that spans entire HTTP request or whatever. We just need to make sure that once we attempt to save changes to aggregate and bump up its version, it is all or nothig operation.</p>
+<p>Protection against concurrent updates is not something I can pass over in silence. Frankly, I find it bizzarre that most of articles about event sourcing implementation does not say a word about these issues and possible solutions. As though projects that articles' authors have been working on are not subjected to concurrency issues (seriously?). There is a common misconception that READ - MODIFY - WRITE approach within a RDBMS transaction is always a safe thing. Well, no. Read this excellent article to understand why (and see ways of coping with it): <a href="https://blog.2ndquadrant.com/postgresql-anti-patterns-read-modify-write-cycles/">PostgreSQL anti-patterns: read-modify-write cycles</a>. Getting back to event sourcing, we need protection. I dare to say this should be provided by database engine. Of course, we could work around this problem using pessimistic locking and Redis, yet it makes implementation harder and I find it hardly satisfying. That is also a <a href="https://issues.apache.org/jira/browse/KAFKA-2260">reason</a> why you will not find anything about Kafka in this article.</p>
+<p>Events are not only stored. We usually propagate them over our system to let different components react accordingly. There are mature solutions doing just this thing (brokers). Among available options there are RabbitMQ and Kafka just to name a few. Even Redis can sometimes suffice. Nevertheless, it is nice to have such functionality within database itself to get rid of another headache - what if saving event succeeds (we can not undo this) and sending it via broker fails?</p>
+<h3>Requirements wrap-up:</h3>
+<ul>
+<li>Efficient access to all events for given aggregate</li>
+<li>Scalability</li>
+<li>Strong consistency guarantees</li>
+<li>Possibility of implementing optimistic locking/different protection without external services</li>
+<li>(nice to have) built-in message passing functionality</li>
+</ul>
+<h2>Choice number 1 - PostgreSQL</h2>
+<p>This should not be a surprise. A mature, battle-proven open source solution can be a perfect base for event sourcing datastore. One-table-for-all-events is a good approach providing efficient read and writes. It can be scaled using table partitioning or sharding (more or less manual, but still - within a reach). PostgreSQL has strong consistency guarantees, so this requirement is also met. Protection against concurrent updates using optimistic locking is quite easy to implement. Finally, PostgreSQL has also message passing with <a href="https://www.postgresql.org/docs/10/static/sql-notify.html">NOTIFY</a>/<a href="https://www.postgresql.org/docs/10/static/sql-listen.html">LISTEN</a>. It seems like a perfect choice!</p>
+<h3>Table design</h3>
+<p>Nothing changed since the first proposition, we still want to keep all events in one table:</p>
+<pre class="lang:default decode:true ">Events
+---------------------------------------
+| uuid | aggregate_uuid | name | data |
+---------------------------------------</pre>
+<p>However, to get protection against concurrent updates we will use another table:</p>
+<pre class="lang:default decode:true">Aggregates
+------------------
+| uuid | version |
+------------------</pre>
+<p>A version will be bumped up by one everytime we have some events to save. Using additional condition in <em>UPDATE</em> query and a returned number of affected rows we can easily tell if we won the race or not:</p>
+<pre class="lang:default decode:true"># 1 - expected version
+UPDATE "aggregates"
+    SET version = 2
+    WHERE "aggregate_uuid" = 'f42d9a33-81da-45ba-a066-32de5e747067'
+    AND "version" = 1  # expected version check</pre>
+<p>If this query returns <em>affected rows count</em> equal 1 - we are good to go. Otherwise it means someone changed history in the meantime and we should raise <strong>ConcurrentStreamWriteError</strong>.</p>
+<p>Code for creating both tables:</p>
+<pre class="lang:pgsql decode:true">CREATE TABLE "aggregates" (
+    uuid VARCHAR(36) NOT NULL PRIMARY KEY,
+    version int NOT NULL DEFAULT 1
+);
+
+CREATE TABLE "events" (
+    uuid VARCHAR(36) NOT NULL PRIMARY KEY,
+    aggregate_uuid VARCHAR(36) NOT NULL REFERENCES "aggregates" ("uuid"),
+    name VARCHAR(50) NOT NULL,
+    data json
+);
+
+# Do not forget about the index!
+CREATE INDEX aggregate_uuid_idx ON "events" ("aggregate_uuid");</pre>
+<p>There are numerous ways of getting data from these tables to Python. One of them is using an ORM. Mapping in almighty SQLAlchemy can look like this:</p>
+<pre class="lang:python decode:true">class AggregateModel(Base):
+    __tablename__ = 'aggregates'
+
+    uuid = Column(VARCHAR(36), primary_key=True)
+    version = Column(Integer, default=1)
+
+
+class EventModel(Base):
+    __tablename__ = 'events'
+
+    uuid = Column(VARCHAR(36), primary_key=True)
+    aggregate_uuid = Column(VARCHAR(36), ForeignKey('aggregates.uuid'))
+    name = Column(VARCHAR(50))
+    data = Column(JSON)
+
+    aggregate = relationship(AggregateModel, uselist=False, backref='events')</pre>
+<p>Relying on this code, we can quite easily implement <em>load_stream</em> method of <em>EventStore</em>:</p>
+<pre class="lang:python decode:true">class PostgreSQLEventStore(EventStore):
+
+    def __init__(self, session: Session):
+        self.session = session  # we rely on SQLAlchemy, so we need Session to be passed for future usage
+
+    def load_stream(self, aggregate_uuid: uuid.UUID):
+        try:
+            aggregate: AggregateModel = self.session.query(  # we query for aggregate with its events
+                AggregateModel
+            ).options(
+                joinedload('events')
+            ).filter(
+                AggregateModel.uuid == str(aggregate_uuid)
+            ).one()
+        except exc.NoResultFound:  # we do not allow sqlalchemy-specific exception to reach our code level higher
+            raise NotFound
+
+        # translate all events models to proper event objects (see part 1)
+        events_objects = [self._translate_to_object(model) for model in aggregate.events]
+        version = aggregate.version
+ 
+        return EventsStream(events_objects, version)
+
+    def _translate_to_object(self, event_model: EventModel) -&gt; Event:
+        """This method is responsible for translating models to event classes instances"""
+        class_name = event_model.name
+        kwargs = event_model.data
+        # assuming `events` is a module containing all events classes we can easily get
+        # desired class by its name saved along with event data
+        event_class: typing.Type[Event] = getattr(events, class_name)
+        return event_class(**kwargs)</pre>
+<p>There are no tricky things inside beside translating models to events classes.</p>
+<p><strong>WARNING: one should consider abandoning ORM in favour of <a href="http://docs.sqlalchemy.org/en/latest/core/tutorial.html">SQLAlchemy core</a> or even raw queries to gain some performance boost. ORM does not add much value here and is definitely less efficient than other methods.</strong></p>
+<p><em>append_to_stream</em> is a bit more complicated:</p>
+<pre class="lang:python decode:true  ">    def append_to_stream(
+            self,
+            aggregate_uuid: uuid.UUID,
+            expected_version: typing.Optional[int],
+            events: typing.List[Event]
+    ):
+        # returns connection within session (same transaction state)
+        connection = self.session.connection()
+
+        if expected_version:  # an update
+            stmt = AggregateModel.__table__.update().values(
+                version=expected_version + 1
+            ).where(
+                (AggregateModel.version == expected_version) &amp;
+                (AggregateModel.uuid == str(aggregate_uuid))
+            )
+            result_proxy = connection.execute(stmt)
+
+            if result_proxy.rowcount != 1:  # 1
+                raise ConcurrentStreamWriteError
+        else:  # new aggregate
+            stmt = AggregateModel.__table__.insert().values(
+                uuid=str(aggregate_uuid),
+                version=1
+            )
+            connection.execute(stmt)
+
+        for event in events:
+            connection.execute(
+                EventModel.__table__.insert().values(
+                    uuid=str(uuid.uuid4()),
+                    aggregate_uuid=str(aggregate_uuid),
+                    name=event.__class__.__name__,
+                    data=event.as_dict()
+                )
+            )</pre>
+<p>Implementation is quite straighforward and self-explanatory. We use SQLAlchemy Core here due to low level API, allowing to check how many rows were affected by an update <strong>(1)</strong>. Protection against concurrent updates is achieved thanks to conditional update of <em>version</em> in <em>aggregates</em> table. Eventually, we insert all events one by one.</p>
+<p>Please take a note that managing transaction is not a business of <strong>PostgreSQLEventStore</strong>.</p>
+<p>In the end, we would like to inform all interested parties about new events. We can do this by executing NOTIFY for each inserted event:</p>
+<pre class="lang:python decode:true ">        for event in events:
+            aggregate_uuid_str = str(aggregate_uuid)
+            event_as_dict = event.as_dict()
+
+            connection.execute(
+                EventModel.__table__.insert().values(
+                    uuid=str(uuid.uuid4()),
+                    aggregate_uuid=aggregate_uuid_str,
+                    name=event.__class__.__name__,
+                    data=event_as_dict
+                )
+            )
+
+            payload = json.dumps(event_as_dict)
+            connection.execute(f'NOTIFY events, \'{aggregate_uuid_str}_{event.__class__.__name__}_{payload}\'')</pre>
+<p>Bear in mind that notifications will not be send until transaction is commited. Also listeners should operate in a non-transactional mode. Read more about caveats in <a href="https://www.postgresql.org/docs/10/static/sql-notify.html">NOTIFY</a> and <a href="https://www.postgresql.org/docs/10/static/sql-listen.html">LISTEN</a> docs.</p>
+<p>An exemplary listener code using <a href="http://aiopg.readthedocs.io/en/stable/index.html">aiopg</a> and asyncio:</p>
+<pre class="lang:python decode:true">import asyncio
+import aiopg
+
+dsn = 'dbname=XXX user=XXX password=XXX host=127.0.0.1'  # change me
+
+
+async def listen(conn):
+    async with conn.cursor() as cur:
+        await cur.execute('LISTEN events')
+        while True:
+            msg = await conn.notifies.get()
+            print('Receive &lt;-', msg.payload)
+
+
+async def main():
+    async with aiopg.create_pool(dsn) as pool:
+        async with pool.acquire() as conn1:
+            listener = listen(conn1)
+            await listener
+
+
+loop = asyncio.get_event_loop()
+loop.run_until_complete(main())
+</pre>
+<h2>Putting it all together</h2>
+<h3>Load an aggregate</h3>
+<p>Whenever you want to load an aggregate from EventStore:</p>
+<pre class="lang:default decode:true"># GIVEN:
+# session - sqlalchemy Session instance
+# aggregate_uuid - UUID of loaded Order
+
+event_store = PostgreSQLEventStore(session)  # 1
+event_stream = event_store.load_stream(aggregate_uuid)  # 2
+order = Order(event_stream)  # 3
+
+</pre>
+<ol>
+<li>Initialize PostgreSQLEventStore with SQLAlchemy's Session instance. Event store probably should not create this on its own, since usually we would like to have control over session begin/commit a level or few higher</li>
+<li>Get <em>EventStream</em> instance using <em>aggregate_uuid</em></li>
+<li>Create <em>Order</em> instance initializing it with freshly obtained <em>event_stream</em></li>
+</ol>
+<p>Implementation of <em>Order</em> class changed slightly since <a href="https://breadcrumbscollector.tech/implementing-event-sourcing-in-python-part-1-aggregates/">part 1</a> and now looks like this:</p>
+<pre class="lang:python decode:true">class Order:
+    def __init__(self, event_stream: EventStream):
+        self.version = event_stream.version
+
+        for event in event_stream.events:
+            self.apply(event)
+
+        self.changes = []
+
+    # the rest remains unchanged</pre>
+<p>Now it accepts <em>event_stream</em> to save <em>version</em> as an instance property for future use (this is a bit more handy).</p>
+<h3>Save changes</h3>
+<pre class="lang:python decode:true"># GIVEN:
+# session - sqlalchemy Session instance
+# order - Order instance
+
+event_store = PostgreSQLEventStore(session)
+new_events = aggregate.changes  # 1
+expected_version = aggregate.version  # 2
+try:
+    event_store.append_to_stream(order.uuid, expected_version, new_events)  # 3
+except ConcurrentStreamWriteError:
+    # what now?
+</pre>
+<ol>
+<li>Get events emitted in aggregate since last fetch</li>
+<li>Get a version of the aggregate that it had when we fetched it</li>
+<li>Append new events to the stream</li>
+</ol>
+<h3>What to do when <em>ConcurrentStreamWriteError</em> is raised?</h3>
+<p>It depends on business requirements and scenario. In case of an Order instance we may imagine that someone accepts the order and some other guy concurrently tries to cancel it. We could try to fetch aggregate again and resolve conflict manually, but much simpler (and in most cases sufficient!) approach is to just retry entire operation that touches our aggregate. This is an example using <a href="https://pypi.python.org/pypi/retrying">retrying</a> library:</p>
+<pre class="lang:default decode:true">@retry(retry_on_exception=lambda exc: isinstance(exc, ConcurrentStreamWriteError)
+def cancel_order(event_store: EventStore, order_uuid: UUID):
+    event_stream = event_store.load_stream(order_uuid)
+    order = Order(event_stream)
+    order.cancel()  # 5
+    event_store.append_to_stream(order.uuid, order.version, order.changes)  # 6
+</pre>
+<p>Assume there is a race condition between setting two statuses, cancelled and confirmed. If latter wins, then code above will raise <em>ConcurrentStreamWriteError</em> in line 6. <em>@retry</em> decorator will take care of retrying whole thing again and loading entire aggregate once again, this time with most recent version. Provided there are no more concurrent updates we finally are able to cancel our newly confirmed order OR raise another exception in line 5 if our business rules do not allow for cancelling order that is confirmed. Quite easy and safe solution, adhering to Zen of Python's</p>
+<blockquote><p>Explicit is better than implicit.</p></blockquote>
+<h2>Further optimizations</h2>
+<h3>Repository pattern</h3>
+<p>Code responsible for loading and saving aggregates will probably look the same in many places. To avoid repetitions, I suggest to use Repository pattern and hide this logic behind get/save methods:</p>
+<pre class="lang:python decode:true">class AggregatesRepository:
+    def __init__(self, event_store: EventStore);
+        self.event_store = event_store
+
+    def get(self, aggregate_uuid: UUID):
+        event_stream = event_store.load_stream(order_uuid)
+        return Order(event_stream)
+
+    def save(self, order: Order):
+        event_store.append_to_stream(order.uuid, order.version, order.changes)
+</pre>
+<h3>Simplify append_to_stream signature</h3>
+<p>Since all parameters to <em>append_to_stream</em> method are taken from an aggregate, we could as well just make it accept an aggregate instance. No harm should be caused in result.</p>
+<pre class="lang:python decode:true">class Aggregate(metaclass=ABCMeta):  # we introduce abstract base class
+
+    def __init___(self, event_stream: EventStream):
+        self._version = event_stream.version
+
+        for event in event_stream.events:
+            self.apply(event)
+
+        self._changes = []
+
+    @abstractmethod
+    def apply(self, event: Event):
+        pass
+
+    @property
+    def version(self):
+        return self._version
+
+    @property
+    def changes(self):
+        return self._changes
+
+class Order(Aggregate):
+    ...
+
+
+class EventStore(metaclass=abc.ABCMeta):
+
+    @abstractmethod
+    def load_stream(self, aggregate_uuid: uuid.UUID) -&gt; EventsStream:
+        pass
+
+    @abstractmethod
+    def append_to_stream(self, aggregate: Aggregate) -&gt; None:
+        pass</pre>
+<p>Majority of information in this post comes from PostgreSQL docs and Appendix to Implementing Domain Driven Design.</p>
+<p>This is the end of second part devoted to implementing Event Sourcing in Python. New week = new post. Next time I will show event store implementation based on RethinkDB, modern NoSQL document-oriented database with message passing capabilities. Hold tight, guys!</p>
+<p><em>This post is a part of <a href="https://breadcrumbscollector.tech/category/event-sourcing/">Implementing Event Sourcing</a> series. It consists of code snippets, thoughts and practical advice how to implement ES in your own project. The contents of this post will probably make most sense if you also read all other parts. Then you should be ready to use it in your own projects.</em></p>
+<p>&nbsp;</p>

@@ -1,0 +1,71 @@
+---
+layout: post
+title: Optimizing MySQL queries
+date: 2017-05-29 18:16:39.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- dajsiepoznac2017
+tags: []
+permalink: "/optimizing-mysql-queries/"
+---
+<p>One suboptimal database query can effectively paralyse whole application. Tracking down such bottleneck is one thing but speeding it up is not a trivial task. This article is intended to show how one can analyse and refactor slow database query.</p>
+<p>In all examples I was using <a href="https://www.mysql.com/products/workbench/">MySQL Workbench</a> and <a href="https://dev.mysql.com/doc/sakila/en/sakila-installation.html">Sakila example database</a>.</p>
+<p>DB's structure is illustrated <a href="https://dev.mysql.com/doc/sakila/en/sakila-structure.html">here</a>. Please open it and refer to before reading any assignment's SQL.</p>
+<h3>Assignment</h3>
+<p>Let's say we want to have a...payment amount of a latest rental date per film. Query I wrote:</p>
+<pre class="lang:mysql decode:true ">SELECT title, amount FROM (
+	SELECT film.title, payment.amount
+	FROM film
+	JOIN inventory
+		ON inventory.film_id = film.film_id
+	JOIN rental
+		ON rental.inventory_id = inventory.inventory_id
+	JOIN payment
+		ON payment.rental_id = rental.rental_id
+	ORDER BY film.title, rental.rental_id DESC, amount DESC
+) AS f
+GROUP BY title</pre>
+<p>On the bright side it shows all relations between tables in a very readable, straightforward way. Too bad it is suboptimal. I could easily support this claim using MySQL's <strong>EXPLAIN</strong>, but MySQL Workbench has a very useful feature of presenting <strong>EXPLAIN</strong>'s  results in a graphical form:</p>
+<p><img class="alignnone size-full wp-image-136" src="{{ site.baseurl }}/assets/2017/05/Zrzut-ekranu-2017-05-29-o-19.04.21.png" alt="" width="1592" height="1090" /></p>
+<p>One should read this diagram starting from the lower-left corner. This query is actually very poor when it comes to efficiency. Despite the fact it utilizes indexes <strong>JOIN</strong>ing another tables, in the end it has to perform grouping operation and reject almost all results. This stage (rejecting) is depicted as "Full Table Scan" rectangle.  This will become even more problematic over time because our tables will grow, not shrink. Especially <em>rentals</em> (history) table.</p>
+<p>Let's consider another approach to the same problem:</p>
+<pre class="lang:mysql decode:true">SELECT film.title, payment.amount 
+FROM film
+JOIN rental
+	ON rental.rental_id = (
+		SELECT max(rental_id)
+		FROM rental
+		WHERE inventory_id IN (
+			SELECT inventory_id
+			FROM inventory 
+			WHERE film_id = film.film_id
+		)
+	)
+JOIN payment
+	ON payment.rental_id = rental.rental_id
+ORDER BY amount DESC</pre>
+<p>It may look complicated owing to usage of a dependant subquery. So, what is it anyway? Using example is the best way to describe it. Going step by step, we need some columns from <em>film</em> and <em>payment</em> tables. However, there is no way to <strong>JOIN</strong> them directly and this is why we need rental table for. Unfortunately, there is no straightforward way to <strong>JOIN</strong> it either.</p>
+<pre class="lang:mysql decode:true">SELECT film.title, payment.amount 
+FROM film
+JOIN rental
+	ON rental.rental_id = -- ?
+JOIN payment
+	ON payment.rental_id = rental.rental_id
+</pre>
+<p>Rentals are associated with <em>inventory</em> table rows by a relation called many-to-one. In other words, there may be multiple <em>rentals</em> of the same <em>inventory</em> item which is directly associated with a <em>film</em> (finally). So in order to reach a latest rental I wrote a subquery:</p>
+<pre class="lang:mysql decode:true">SELECT max(rental_id)
+FROM rental
+WHERE inventory_id IN (
+    SELECT inventory_id
+    FROM inventory 
+    WHERE film_id = film.film_id -- &lt;-------- DEPENDENCE!
+)</pre>
+<p>It is dependant on the outer query because to calculate outcome it needs a <em>film_id</em>. Therefore, DB engine has to execute it for each row from <em>film</em> table. It may sound as if it was an inefficient solution. Let's dispute this claim using MySQL Workbench:</p>
+<p><img class="size-full wp-image-134 aligncenter" src="{{ site.baseurl }}/assets/2017/05/Zrzut-ekranu-2017-05-29-o-18.11.22.png" alt="" width="1826" height="1194" /></p>
+<p>As you can see, it's not completely bad after all. We see that there are multiple indexes usages, so despite the fact we execute subquery per each row from <em>film</em> table, we still get latest rental quite efficiently.</p>
+<p>On a side note - I can't see the reason why MySQL engine used Full Index Scan on the <em>film</em> table. It makes no sense because query returns all rows from <em>film</em> table anyway - I did not introduce any kind of filtering.</p>
+<p>Resultant query is quite satisfactory. There is no waste - no rows are rejected at all. It also leaves a room for easy filtering <em>film</em> table.</p>

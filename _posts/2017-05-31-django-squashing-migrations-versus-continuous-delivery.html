@@ -1,0 +1,50 @@
+---
+layout: post
+title: Django - squashing migrations versus continuous delivery
+date: 2017-05-31 21:59:06.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- dajsiepoznac2017
+- python
+tags: []
+permalink: "/django-squashing-migrations-versus-continuous-delivery/"
+---
+<p>Every Django project may encounter a steady increase in a number of migrations over time. One way to lower their quantity is to use <strong>squashing</strong>. Squashing amounts to taking contents of few migrations and connecting them into one. This would reduce their number, but what happens if we squash a bunch of migrations that were already partially applied to one of application's instances?</p>
+<p>Let's consider following situation. We have three different migrations in our app:</p>
+<pre class="lang:default decode:true "> - 0001_initial
+ - 0002_auto_20170531_2038
+ - 0003_rental</pre>
+<p>We squashed them to one:</p>
+<pre class="lang:default decode:true">~/squash_versus_cd&gt; ./manage.py squashmigrations core 0001_initial 0003_rental
+Will squash the following migrations:
+ - 0001_initial
+ - 0002_auto_20170531_2038
+ - 0003_rental
+Do you wish to proceed? [yN] y
+Optimizing...
+  Optimized from 4 operations to 3 operations.
+Created new squashed migration core/migrations/0001_initial_squashed_0003_rental.py</pre>
+<p>If we inspect newly created migration's code we discover that django placed a clear sign that our new migration replaces old ones:</p>
+<pre class="lang:python decode:true ">replaces = [
+    ('core', '0001_initial'),
+    ('core', '0002_auto_20170531_2038'),
+    ('core', '0003_rental')
+]</pre>
+<p>If we ever decided to set up another instance of our application, it django would execute our squashed migration only (<strong>0001_initial_squashed_0003_rental</strong>).</p>
+<p>What if we found ourselves in a less pleasant situation, when we have our instance partially migrated? Let's say we have executed migrations 0001 and 0002:</p>
+<pre class="lang:default decode:true ">squash_versus_cd&gt; ./manage.py showmigrations
+core
+ [X] 0001_initial
+ [X] 0002_auto_20170531_2038
+ [ ] 0003_rental
+</pre>
+<p>Unless we deleted original migration files (django won't touch them) we will be able to just run .<strong>/manage.py migrate</strong>. Django will handle this situation.</p>
+<pre class="lang:default decode:true">squash_versus_cd&gt; ./manage.py migrate
+Operations to perform:
+  Apply all migrations: admin, auth, contenttypes, core, sessions
+Running migrations:
+  Applying core.0003_rental... OK</pre>

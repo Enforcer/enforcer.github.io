@@ -1,0 +1,374 @@
+---
+layout: post
+title: How to implement a service layer in Django + Rest Framework
+date: 2020-04-27 09:00:00.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- django
+- python
+- software engineering
+tags: []
+permalink: "/how-to-implement-a-service-layer-in-django-rest-framework/"
+---
+<p><!-- wp:paragraph --></p>
+<p>From this article you will learn:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>what is the service layer?</li>
+<li>the problem solved by a service layer</li>
+<li>how to refactor to services from ModelSerializers</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:heading --></p>
+<h2>What is the service layer?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>A service layer is a set of classes or functions, called services, that together form an API for a single package or application. We can distinguish two kinds of services - application services and domain services. In this article, I will be focusing solely on the first type, i.e. application services.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>A single application service provides an indivisible piece of functionality for an actor using the system, e.g. shopper, traveller, merchant. If we take an example of an e-commerce application, we could have the following application services:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>add an item to a basket</li>
+<li>increase/decrease items count in a basket</li>
+<li>confirm order</li>
+<li>pay for the order</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>Each application service stands for handling a single action of a user. If, for example, some business process requires multiple steps (like ordering - from confirming to entering address details to paying), we do not model them as one application service. Each user action gets its own service.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Service layer is nothing more but a set of application services. Code-wise, service layer is implemented as classes, methods (like Facade pattern or functions:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># services as classes
+class ConfirmOrder:
+    def confirm(...):
+        ...
+
+class PayForTheOrder:
+    def pay(...):
+        ...
+
+# services as functions
+def confirm_order(...):
+    ...
+
+def pay_for_the_order(...):
+    ...
+
+# services as methods (Facade)
+class OrdersApplicationFacade:
+    def confirm_order(self, ...):
+        ...
+
+    def pay_for_the_order(self, ...):
+        ...</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Why use services?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>One place to look for application logic</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Services aim to provide a single place to look for application logic.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>The service layer is ignorant of an actor interface or a delivery mechanism. They do not know whether they are called from REST[ful] API, Celery task or CLI command. Hence, application services introduce a pleasant feeling of uniformity throughout the project. If one wants to know what the application does, they can just read services.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Easier testing</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>That lack of knowledge about the outer world let us test application logic easier because we require less information to exercise it. In particular, Acceptance/Functional/BDD tests can use a service layer to extensively test our application. Even without more tricks, such tests will be slightly faster because they will not run the framework code.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Put logic that doesn't fit elsewhere</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The service layer is also a great place to put a logic when it does not fit other places - especially models. Don't get me wrong, it's perfectly fine to implement a method like <code>confirm</code> in your <code>Order</code> model to check if it has not been confirmed before, but sending an e-mail from model's guts or calling 3rd party service's API should at least make you wonder for a moment if there is a better way. If our models implement the majority of logic, we call them Fat Models. It's a good approach if a model can fulfil the request using its own data or related models. Does not work well if we need to reach outside and makes model classes unmaintainable.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Putting business logic that doesn't fit into models in views or serializers sounds like a good idea, but also mixes two worlds - web and the service that is provided by the application. As a result, view or serializer classes might contain code that is completely unrelated to handling web requests.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>See also <a href="https://sunscrapers.com/blog/where-to-put-business-logic-django/">Where to put business logic in Django?</a></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Bridge the gap between business and software development</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p><strong>The most important argument in favour of service layers is that thinking in terms of application services helps to bridge the gap between business and software development.</strong> Traditionally, developers would receive requirements and translate them in their heads to models (or simply database tables), endpoints etc. Although it works just fine for simpler applications, it causes a lot of knowledge to get lost in the longer term. Understanding of what the goal is and business processes exist temporarily in developers minds. Perhaps also in as some sort of documentation artefact that is detached from code anyway. Assuming the project is a success and development proceeds, the code becomes more and more complex. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Not a silver bullet</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>There is no silver bullet, though. If your application is a simple database browser or as complex as a blog from Django tutorial, don't bother about services ;)</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>How to implement a service layer in Django?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Let's assume we have an application that uses <a href="https://www.djangoproject.com/">Django</a> and <a href="https://www.django-rest-framework.org/">Rest Framework</a> in tandem. Usually, our application consists of a bunch of ViewSets with ModelSerializers. The example we will be analysing is about making a hotel booking. That involves:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>calling 3rd party to do the reservation</li>
+<li>saving HotelBooking model to the database</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>A "standard" way of implementing this scenario is to abuse a ViewSetr or ModelSerializer for HotelBooking and squeeze calling 3rd party API somewhere before saving the model.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># at least viewset is dead simple
+class HotelBookingViewSet(CreateModelMixin, GenericViewSet):
+    queryset = HotelBooking.objects.all()
+    serializer_class = HotelBookingSerializer
+
+class HotelBookingSerializer(serializers.HyperlinkedModelSerializer):
+    start_date = serializers.DateField()
+    end_date = serializers.DateField()
+    special_wishes = serializers.CharField()
+    hotel = serializers.HyperlinkedRelatedField(queryset=Hotel.objects.all(), view_name='hotel-detail')
+
+    class Meta:
+        model = HotelBooking
+        fields = (
+            "start_date",
+            "end_date",
+            "special_wishes",
+            "hotel",
+        )
+
+    # skip validation code for clarity. It should be there
+
+    def create(self, validated_data):
+        payload = self._prepare_supplier_payload(validated_data)
+
+        try:
+            response = requests.post("https://some-3rd-party/bookings/hotel", json=payload)
+            response.raise_for_status()
+        # if something goes wrong - fail the booking 
+        except RequestException:
+            logger.log("(Log what went wrong)")
+            raise ServiceUnavailable
+
+        # take data from 3rd party response and put it to model
+        response_json = response.json()
+        validated_data&#91;"supplier_booking_reference"] = response_json&#91;"refNumber"]
+
+        # finally, save model
+        instance = super().create(validated_data)
+
+        return instance
+
+    # build arguments for third party
+    @staticmethod
+    def _prepare_supplier_payload(validated_data):
+        start_date = validated_data&#91;"start_date"].strftime("%d-%m-%Y")
+        number_of_days = (validated_data&#91;"end_date"] - validated_data&#91;"start_date"]).days
+        return {
+            "hotelId": validated_data&#91;"hotel"].supplier_id,
+            "startDate": start_date,
+            "guestWish": validated_data&#91;"special_wishes"],
+            "days": number_of_days
+        }</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>As you can see, the majority of code has nothing to do actual (de)serialization. The logic for calling 3rd party is literally squeezed between validation and model saving. Now, you can confidently tell that when a lot happens between these two, this approach starts to collapse.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Refactoring to use Service</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Radical way</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>There are several possible approaches to do that. One, very radical, comes down to:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>get rid of ModelSerializer at once and use "normal" Serializer instead</li>
+<li>Move application-specific code to a service</li>
+<li>Create a @dataclass for service arguments</li>
+<li>use more basic ViewSet from Rest Framework and orchestrate serializer - service data flow</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>First, let's see how view and serializer change:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># Now ViewSet is a bit more complex. Due to lack of proper 
+# base class in rest_framework, we need to partially do the work 
+# of CreateModelMixin - call serializer validation
+class HotelBookingViewSet(ViewSet):
+    def create(self, request):
+        # we invoke validation and build service input argument
+        # in a form of a DTO (DataTransferObject)
+        dto = self._build_dto_from_validated_data(request)
+
+        hotel_booking_service = HotelBookingService()
+        try:
+            hotel_booking_service.book(dto)
+        except HotelBookingFailure:
+            return JsonResponse({"success": False}, status=503)
+
+        return JsonResponse({"success": True})
+
+    def _build_dto_from_validated_data(self, request) -> dict:
+        serializer = HotelBookingSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        return HotelBookingDto(
+            start_date=data&#91;"start_date"],
+            end_date=data&#91;"end_date"],
+            hotel_id=data&#91;"hotel"].id,
+            hotel_supplier_id=data&#91;"hotel"].supplier_id,
+            special_wishes=data&#91;"special_wishes"],
+        )
+
+# HotelBookingSerializer no longer inherits from ModelSerializer 
+class HotelBookingSerializer(serializers.Serializer):
+    start_date = serializers.DateField()
+    end_date = serializers.DateField()
+    special_wishes = serializers.CharField()
+    hotel = serializers.HyperlinkedRelatedField(queryset=Hotel.objects.all(), view_name='hotel-detail')</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>There goes service code:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># DataTransferObject for input data
+@dataclass
+class HotelBookingDto:
+    start_date: date
+    end_date: date
+    hotel_id: int
+    hotel_supplier_id: str
+    special_wishes: str
+
+
+class HotelBookingService:
+    def book(self, dto):
+        # logic itself is not different - it was simply moved
+        # from former HotelBookingSerializer
+        payload = self._prepare_supplier_payload(dto)
+
+        try:
+            response = requests.post("https://some-3rd-party/bookings/hotel", json=payload)
+            response.raise_for_status()
+        except RequestException:
+            raise HotelBookingFailure
+
+        HotelBooking.objects.create(
+            hotel_id=dto.hotel_id,
+            start_date=dto.start_date,
+            end_date=dto.end_date,
+            special_wishes=dto.special_wishes,
+        )
+
+    # build arguments for third party
+    @staticmethod
+    def _prepare_supplier_payload(dto):
+        start_date = dto.start_date.strftime("%d-%m-%Y")
+        number_of_days = (dto.end_date - dto.start_date).days
+        return {
+            "hotelId": dto.hotel_supplier_id,
+            "startDate": start_date,
+            "guestWish": dto.special_wishes,
+            "days": number_of_days
+        }</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>And that's it. Certainly, this example could could use a little refactoring, especially for a view. Due to lack o proper abstraction in rest framework, I had to write some glue code between viewset and serializer. If I had more of them, I would definitely create some base class like <code>ServiceView</code> that instantiates appropriate serializer and creates DTO automatically. Speaking of DTO...</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"id":760,"width":556,"height":500,"sizeSlug":"large"} --></p>
+<figure class="wp-block-image size-large is-resized"><img src="{{ site.baseurl }}/assets/2020/04/is_this_code_duplication.jpeg" alt="" class="wp-image-760" width="556" height="500" /></figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>Well, not exactly the same (there is small difference for <code>hotel</code> versus <code>hotel_id</code> and <code>hotel_supplier_id</code>), but certainly something's up. From my perspective, that's just a consequence of Rest Framework serializers' design. We would not have that issue with <a href="https://pydantic-docs.helpmanual.io/">Pydantic</a> that is able to both validate data and provide a class for it. Another possible solution is to just pass <code>validated_data</code> to service, but at least write a <code>TypedDict</code> to formalize the contract. Oh, and the most important thing - service must not know if it's called from API, so it may not receive HttpRequest instance.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Less radical way with ModelSerializer still in place</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>One nice thing about ModelSerializer is that they handle saving models for you, including many-to-many relations. Also, it is easy to build an endpoint that returns model data after the operation is completed. If saving the model is the last or first step in the process, you may still easily adopt services by extending <code>CreateModelMixin</code> (viewset mixin) <code>perform_create</code> method. First, let's see the code of original mixin:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class CreateModelMixin:
+    """
+    Create a model instance.
+    """
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        headers = self.get_success_headers(serializer.data)
+        return Response(serializer.data, status=status.HTTP_201_CREATED, headers=headers)
+
+    def perform_create(self, serializer):
+        # That's where we can stick our logic!
+        serializer.save()
+
+    def get_success_headers(self, data):
+        ... # irrelevant for the example, so skipping</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Using the same example with booking, we could use <code>perform_create</code> as follows:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class HotelBookingViewSet(CreateModelMixin, GenericViewSet):
+    def perform_create(self, serializer):
+        dto = self._get_dto_from_validated_data(serializer.validated_data)
+        hotel_booking_service = HotelBookingService()
+        try:
+            hotel_booking_service.book(dto)
+        except HotelBookingFailure:
+            raise ServiceUnavailable
+
+        super().perform_create(serializer)  # save in the end
+
+    @staticmethod
+    def _get_dto_from_validated_data(self, validated_data):
+        # the same as in previous code example
+        data = validated_data
+        return HotelBookingDto(
+            start_date=data&#91;"start_date"],
+            end_date=data&#91;"end_date"],
+            hotel_id=data&#91;"hotel"].id,
+            hotel_supplier_id=data&#91;"hotel"].supplier_id,
+            special_wishes=data&#91;"special_wishes"],
+        )</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Although this approach reuses more code from the framework we must ask ourselves if we do not give up too easy. The goal is to separate business logic from the framework after all.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Services are handy (and relatively cheap!) way to decouple application logic from the framework. It's not only about code organization and improved testability. The most important aspect is bridging the gap between business and software development. Hence, the focus is on using patterns that expose our business logic in plain sight, not hide it in serializers/views guts.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Bear in mind we barely scratched the surface of possible solutions. If you are interested in more advanced techniques, read my post about <a href="https://breadcrumbscollector.tech/the-clean-architecture-in-python-how-to-write-testable-and-flexible-code/">The Clean Architecture in Python</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><strong>Further reading on service layers in Django:</strong></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li><a href="https://valian.github.io/python-business-logic-presentation/">https://valian.github.io/python-business-logic-presentation/</a></li>
+<li><a href="https://github.com/Valian/python-business-logic">https://github.com/Valian/python-business-logic</a></li>
+<li><a href="https://www.reddit.com/r/django/comments/fjqvwc/against_service_layers_in_django/">Against service layers in Django</a></li>
+</ul>
+<p><!-- /wp:list --></p>

@@ -1,0 +1,174 @@
+---
+layout: post
+title: Where to put all your utils in Python projects?
+date: 2021-05-23 17:39:25.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- good practices
+- software engineering
+tags: []
+permalink: "/where-to-put-all-your-utils-in-python-projects/"
+---
+<p><!-- wp:paragraph --></p>
+<p>This is a follow-up post to <a href="https://breadcrumbscollector.tech/stop-naming-your-python-modules-utils/">Stop naming your Python modules "utils"</a>. This time, let's see different options on organizing utility code. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>What is utility code?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>It is code that is created as a side effect when working on features but does not belong to where they are implemented. It still is necessary or convenient to use but can be easily generalized or reused in many different places in the code.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Few examples from the projects I've been working on:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>a generator function that accepts an iterable and yields chunks of N elements</li>
+<li>sanitiser function for phone numbers</li>
+<li>convert XML to <code>dict</code></li>
+<li>format <code>datetime</code> objects in a way that will be accepted by some 3rd party provider*</li>
+<li>get a random string of a given length</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph {"fontSize":"small"} --></p>
+<p class="has-small-font-size">*that one is not typical util, it should be somewhere near the code responsible for communicating with that 3rd party provider.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Where can you put utils in Pythonic projects?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Next to feature code that uses it</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Initially, this may be a good idea. However, eventually becomes awkward if you want to reuse that elsewhere. Let's say there is a utility function implemented next to Feature A and you want to use that in Feature B. Should the latter know about Feature A only because we would like to reuse some utility code? Nope.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Keep reading if you want to learn about better ways. That being said, if a utility is only used in a Feature A - deferring refactoring it out to another place will not do any harm.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>In "utils.py"/"misc.py" etc</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>...👿 No, do not put it there. Why? See why this is bad in a related article: <a href="https://breadcrumbscollector.tech/stop-naming-your-python-modules-utils/">Stop naming your Python modules "utils"</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Under specific path in the project, grouped by themes</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Throwing every random bit of utility code in a single file is a terrible idea. How about acknowledging the need of extending a standard library sometimes? And creating a dedicated space...? Let's say your tiny project is called <em>foo</em> and is organized as follows:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>foo/
+├── api
+│   ├── __init__.py
+│   ├── authors.py
+│   └── books.py
+├── models
+│   ├── __init__.py
+│   ├── author.py
+│   └── book.py
+└── settings.py</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Then, you can add another subtree:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>foo/
+├── api
+│   ├── __init__.py
+│   └── ...
+├── models
+│   ├── __init__.py
+│   └── ...
+├── settings.py
+└── utils &lt;---- Aw, there we go
+    ├── datetimes.py
+    ├── iteration.py
+    └── isbn.py</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Using this method, you can put your utility code in a dedicated namespace. For example, let's say we need a utility to validate <acronym title="International Standard Book Number">ISBN</acronym>. We could put it there so <code>from foo.utils.isbn import validate_isbn</code>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>In fact, that's how utility code is organized in a Django web framework, see these modules:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li><a href="https://docs.djangoproject.com/en/3.2/ref/utils/#module-django.utils.timezone"><code>django.utils.timezone</code></a></li>
+<li><a href="https://docs.djangoproject.com/en/3.2/ref/utils/#module-django.utils.cache"><code>django.utils.cache</code></a></li>
+<li><a href="https://docs.djangoproject.com/en/3.2/ref/utils/#module-django.utils.dateparse"><code>django.utils.dateparse</code></a></li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>just to name a few.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>This is the first approach that actually acknowledges the nature of utility code.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Avoid utils - create a shared core / foundation</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Better yet, we could try to distil something like a shared core as understood by Tactical Domain-Driven Design. Structurally, it will look similar to the previous approach. First, we create a separate subpackage and call it <code>shared_core</code> or <code>foundation</code>. It will be home to a shared understanding of some concepts, like ISBN:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>foo/
+├── api
+│   ├── __init__.py
+│   └── ...
+├── models
+│   ├── __init__.py
+│   └── ...
+├── settings.py
+└── shared_kernel
+    └── isbn.py</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>In fact, we could have a separate class (type!) for this concept:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:enlighter/codeblock --></p>
+<pre class="EnlighterJSRAW" data-enlighter-language="generic" data-enlighter-theme="" data-enlighter-highlight="" data-enlighter-linenumbers="" data-enlighter-lineoffset="" data-enlighter-title="" data-enlighter-group="">class ISBN:
+    _value: str
+
+    def __init__(self, value: str) -> None:
+        # check if value looks like ISBN - if not, raise ValueError
+        self._value = value
+
+    def __repr__(self) -> str:
+        return self._value</pre>
+<p><!-- /wp:enlighter/codeblock --></p>
+<p><!-- wp:paragraph --></p>
+<p>and get rid of procedural thinking that tempts us to validate <code>str</code> instances if they are valid ISBN. Just create an ISBN instance which will make sure it's valid and pass it around!</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Separate packages uploaded to PyPI or a private package repository</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Finally, you can notice utils can often be separate packages uploaded to PyPI. This is probably a perspective of JavaScript devs and the reason why npm registry swarms with really tiny libraries. (Second thing contributing to it may be that JS standard lib is very small compared to Python).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>If for some reason you do not want or can not share the code with the world, why not set up a private PyPI in your company, so these libraries can be easily reused across projects...?</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>All in all, this often this code will be:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>general,</li>
+<li>independently (and easily!) testable,</li>
+<li>reusable.</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Sometimes a question "where shall I put that code" can be a burning one. The answer is pretty obvious in an organized codebase but does not come easy in a messier one. Let me know in the comments section what was the last time you wondered where should you put something in a project.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>I hope that after reading that article you won't ever mistreat your Python utils again :) Last but not least - don't forget to look for libraries that already cover functionality you need instead of writing your own utility.</p>
+<p><!-- /wp:paragraph --></p>

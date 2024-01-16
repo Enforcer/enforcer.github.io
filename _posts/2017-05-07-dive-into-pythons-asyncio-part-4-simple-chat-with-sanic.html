@@ -1,0 +1,64 @@
+---
+layout: post
+title: Dive into Python’s asyncio, part 4 – simple chat with Sanic
+date: 2017-05-07 20:41:56.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- asyncio
+- dajsiepoznac2017
+tags: []
+permalink: "/dive-into-pythons-asyncio-part-4-simple-chat-with-sanic/"
+---
+<p>Let's roll with something practical, namely a simple chat application using Sanic framework mentioned in <a href="https://breadcrumbscollector.tech/dive-into-pythons-asyncio-part-3-web-framework/">previous post</a>.</p>
+<p>Sanic supports websockets out of the box thanks to the <a href="https://pypi.python.org/pypi/websockets">websockets</a> library. It's super easy to write a handler function by using decorator (<strong>#1</strong>):</p>
+<pre class="lang:python decode:true">@app.websocket('/feed')  # 1
+async def feed(request, ws):
+    while True:
+        data = await ws.recv()
+        await ws.send(data)</pre>
+<p>This is what code looks like for a simple echo server. No error handling or communication with external world is done here.</p>
+<p>In order to provide a functional chat service, we need a little more. Our clients should be able to talk to themselves. A concept that represents a virtual place where chat talks are carried out is called a <em>room</em>. A <em>room</em> can be <em>joined</em> and <em>left</em>. In my example it also takes new messages and broadcasts them to all room members.</p>
+<pre class="lang:default decode:true ">class Room:
+
+    def join(self, client):
+        pass
+
+    def leave(self, client):
+        pass
+
+    async def send_message(self, message, sender):
+        pass
+
+    def __len__(self):
+        pass</pre>
+<p>This is how room class scaffolding might look like. For a little convenience (mainly during tests) I added  <em>__len__</em> method, so we can easily ask room for its number of members using pythonic idiom - <em>len(room)</em>.</p>
+<p>The most interesting part is the <em>send_message</em> method:</p>
+<pre class="lang:default decode:true">async def send_message(self, message):
+    for receiver in self.clients:  #1
+        try:
+            await receiver.send(message)  #2
+        except ConnectionClosed:  # 3
+            self.leave(receiver)  # 4</pre>
+<p>We simply iterate over connected folks (<strong>#1</strong>), sending them message passed as an argument (<strong>#2</strong>).</p>
+<p>We must not forget about error handling - (<strong>#3</strong>). Disconnection just a nanosecond before sending a message is an ordinary situation. In such case we remove a flawed client from our room (<strong>#4</strong>). Please take a note that operation of removing member of a collection (self.clients) during iteration may be dangerous and will throw exceptions. In this concrete implementation I used a list. It does not complain about removing subsequent items.</p>
+<p>One vital part of chat code remains to be uncovered - websocket handler function. Here it is:</p>
+<pre class="lang:default decode:true">@app.websocket('/chat')
+async def feed(request, ws):
+    global_room.join(ws)  # 1
+    while True:
+        try:
+            message = await ws.recv()  # 2
+        except ConnectionClosed:  # 3
+            global_room.leave(ws)
+            break  # 4
+        else:
+            await global_room.send_message(message)  # 5
+</pre>
+<p>At the beginning (<strong>#1</strong>) we add every new guy to our room, so he/she can receive messages from the moment of opening the websocket connection. In the meantime we wait for any incoming message (<strong>#2</strong>). We need the same error handling (<strong>#3</strong>) as seen before in <em>send_message</em> implementation. This may look like a redundancy, but it covers completely different use case - for example there is only one client that enters empty room and after a while leaves. This would raise exception in <strong>#2</strong>. So we break the loop (<strong>#3</strong>) allowing Sanic to finalize connection. Otherwise, we broadcast received message to everyone in the <em>room</em> (<strong>#5</strong>).</p>
+<h3>Further considerations:</h3>
+<p>We might not want to wait in line marked <strong>#5</strong> for all other room's members to receive our message, since one slow client would block processing incoming messages. Wrapping this stuff with <a href="https://docs.python.org/3/library/asyncio-task.html#task">asyncio.Task</a> would help.</p>
+<p>Full sources: <a href="http://github.com/Enforcer/simple-chat">here</a></p>

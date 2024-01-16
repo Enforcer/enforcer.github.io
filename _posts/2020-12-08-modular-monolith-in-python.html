@@ -1,0 +1,339 @@
+---
+layout: post
+title: Modular monolith in Python
+date: 2020-12-08 14:00:00.000000000 +01:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- clean architecture
+- good practices
+- python
+- software engineering
+tags:
+- modular monolith
+- modulith
+permalink: "/modular-monolith-in-python/"
+---
+<p><!-- wp:heading --></p>
+<h2>Microservices are not the only way</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>I remember when the microservices boom started. Truth to be told, it still echoes strongly to this day. You could see conferences agendas packed with talks about microservices, articles galore, finally books and frameworks. At some point, I was afraid to open my fridge. Everyone and their dog wanted to work with microservices. But who worked with microservices done wrong, no longer laughs at the circus.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><strong>Don't get me wrong - microservices are great, but they cost a lot and distributed architectures are inherently complex.</strong> The decision to distribute application should not be made lightly as it takes an enormous toll. To make an informed decision, we might use so-called architectural drivers. Simply saying, these are factors favouring microservice architecture:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>Different security concerns for parts of the system,</li>
+<li>Need to scale independently (but remember <a href="https://chrisrichardson.net/post/antipatterns/2019/01/07/microservices-are-a-magic-pixie-dust.html">microservice are NOT a magic pixie dust!</a> distributing application alone will make things slower, not faster)</li>
+<li>Need to use another programming language or concurrency paradigm</li>
+<li>Need separate deployments, e.g. due to various risk</li>
+<li>etc - read more <a href="http://www.kamilgrzybek.com/design/modular-monolith-architectural-drivers/">here</a></li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>A short comment about startups. Even if we have a gut feeling that the project we work on eventually will need to be distributed across a cluster of services, do we really want to do it in the most critical moment of a startup (i.e. before it starts bringing revenue)? Setting up Kubernetes, delivery pipelines and other stuff takes time. Wouldn't it be more productive to spend that time on producing something that will potentially bring value for the end-user...?</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>If not microservices, what other option we have? Not-so-good, ol' scary monolith? Nah. There is a third way - modular monolith AKA modulith!</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Modular monolith (or modulith)</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The idea is simple. <strong>Keep codebase together but thoughtfully packed into separate components.</strong> To make boundaries sharp, we put some extra restrictions about using code from one component in another and very consciously model communication between components of Pythonic modular monolith.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Although microservices transformation did not work out for everyone, we learnt some valuable lessons along the way. Features of a good microservice were identified - sometimes the hard way. These are:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>autonomy</li>
+<li>loosely-coupled with other microservices</li>
+<li>communication only via APIs (no direct access to database)</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>Components of a modular monolith also have these qualities.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>How does a component look like inside?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Each component has a <em>public API</em> and private, internal details. The former is meant to be used from the outside while the latter must not be touched. This is a concept of encapsulation known to you (I hope!) from classes applied at a level of the entire component. You can <a href="https://breadcrumbscollector.tech/encapsulation-is-your-friend-also-in-python/">read more about encapsulation in Python here</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Interestingly, each component can have different internal architecture. For instance, the core component(s) with business-critical stuff or the most complex can implement <a href="https://breadcrumbscollector.tech/the-clean-architecture-in-python-how-to-write-testable-and-flexible-code/">the Clean Architecture</a>. It fosters testability and puts business rules before infrastructural, lower-level concerns. You can see an example <a href="https://github.com/Enforcer/clean-architecture/tree/master/auctioning_platform/auctions/auctions">here - auctions component</a> implementing the Clean Architecture.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>├── application
+│   ├── queries
+│   ├── repositories
+│   └── use_cases
+├── domain
+│   ├── entities
+│   ├── events
+│   ├── exceptions
+│   └── value_objects
+└── tests</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Alternatively, we can use a lightweight approach with database models as our domain objects. Yet another case is when our component is merely a wrapper around a 3rd party API. <a href="https://github.com/Enforcer/clean-architecture/tree/master/auctioning_platform/payments/payments">See payments example</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>├── api
+│   ├── __init__.py
+│   ├── consumer.py
+│   ├── exceptions.py
+│   ├── requests.py
+│   └── responses.py
+├── config.py
+├── dao.py
+├── events.py
+├── facade.py
+├── models.py
+└── tests</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Allowing for different architectures in each component of a modular monolith is a pragmatic approach. Implementing the Clean Architecture is an <a href="https://breadcrumbscollector.tech/when-to-use-the-clean-architecture/">investment which may not pay off </a>in less important or simpler parts of the project. For the sake of sanity, I'd limit internal architectures to 2 - the Clean Architecture &amp; some simpler approach.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>How does a component look like from the outside?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>As mentioned earlier, each component has its own API. Components that implement the Clean Architecture will have a series of Use Cases (possibly followed by Queries)</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>└── application
+    ├── queries
+    │   ├── get_single_auction.py
+    │   └── get_all_auctions.py
+    └── use_cases
+        ├── beginning_auction.py
+        ├── ending_auction.py
+        ├── placing_bid.py
+        └── withdrawing_bids.py</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>while components with less sophisticated internal architecture can use Facade design pattern:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class PaymentsFacade:
+
+    def get_pending_payments(self, customer_id: int) -> List&#91;PaymentDto]:
+        ...
+
+    def start_new_payment(self, payment_uuid: UUID, customer_id: int, amount: Money, description: str) -> None:
+        ...
+
+    def charge(self, payment_uuid: UUID, customer_id: int, token: str) -> None:
+        ...
+
+    def capture(self, payment_uuid: UUID, customer_id: int) -> None:
+        ...</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>It is a bad idea to expose database models or entites/domain objects on the API. Use Data Transfer Objects that can be implemented using attr.s or poor-man's counterpart from the std lib - dataclasses!</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>@dataclass(frozen=True)
+class PaymentDto:
+    id: UUID
+    amount: Money
+    description: str
+    status: str</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>You can use it for both input and output data. <a href="https://www.python.org/dev/peps/pep-0589/">TypedDict</a> also works, especially for output data from queries/query methods of Facades.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Testing modular monolith in Python</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Each component can have it's own test suite that will exercise it thoroughly. One note, though - focus on testing via public API of a component. Some unit tests may be helpful for nailing down edge cases in certain internal classes/functions, but don't focus on testing each and every piece or you will set your codebase in concrete. The same applies to every codebase! An entire component is a handy UNIT for testing.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Of course, this is not sufficient - we know well that 1 integration test &gt;&gt;&gt; 2 unit tests. So we also need a couple of higher-level tests what will see if our components correctly talk to each other.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>How components in a modular monolith written in Python communicate?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The best communication (and dependency) between components is none. However, it cannot be avoided. Let's do it thoughtfully!</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Direct call</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The simplest variant - we just import Facade/Use Case from other module and call it. It introduces a tight coupling and heavy dependency on the called component. (Which is not a bad thing in itself, think of it as a design trade-off).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># web_app
+from auctions import PlacingBid, PlacingBidInputDto
+
+# we can get PlacingBid instance thanks to flask-injector/other Dependency Injection lib
+def some_view(request: Request, placing_bid: PlacingBid) -> Response:
+    dto = PlacingBidInputDto(...)
+    placing_bid.execute(dto)
+    ...</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Definitely, it's a way to go for REST/GraphQL API component - it does not have the logic of their own, but they are interface for the outer world. <a href="https://github.com/Enforcer/clean-architecture/blob/master/auctioning_platform/web_app/web_app/blueprints/auctions.py#L38">See how web_app component calls code from other components.</a></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Direct call via abstract class</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>It can be useful if a core component that implements the Clean Architecture needs to use another component's functionality. The Clean Architecture is very thoughtful about external dependencies and another component is such a thing.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># e.g. in auctions
+class PaymentsPort(abc.ABC):
+    @abc.abstractmethod
+    def pay(bidder_id: int, amount: Money) -> None:
+        pass
+
+# in payments
+class PaymentsAdapter(PaymentsPort):
+    def pay(bidder_id: int, amount: Money) -> None:
+        ... reuse Facade's methods or call 3rd party API right here</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Note that the language of auctions (bidder_id) is imposed on payments which burdens payments component with knowledge about auctions.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Events</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Last but not least - if something in a component of a modular monolith in Python should trigger some action elsewhere in another component, but implementing port/adapter seems too much, one can resort to events. Framework-agnostic solution can leverage <a href="https://pythonhosted.org/blinker/">Blinker</a> library:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from blinker import signal
+
+# this creates a named signal which can be referred in other
+# area of code without importing anything
+# (we just need its name)
+bidder_has_been_overbid = signal('bidder_has_been_overbid')</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>I recommend to use immutable <em>Data Transfer Object</em> for passing event data around:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>@dataclass(frozen=True)
+class BidderHasBeenOverbid:
+    auction_id: int
+    bidder_id: int
+    new_price: Money
+    auction_title: str</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Modelling communication best practices</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Avoid circular dependencies. Think twice when the language of one component leaks to another. Prefer inferior components to accept the language of superior, more important ones.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>For component's unit tests, prefer using stubs of other components. See more details in this article - <a href="https://breadcrumbscollector.tech/beware-of-chicken-testing-or-mocks-overuse/">warning against overusing mocks</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>How do I enforce architectural rules?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>As for today, I can see two viable ways to do it in Python. First, is to write each component as a separate installable package. I did a similar thing in a <a href="https://github.com/Enforcer/clean-architecture">project that illustrates my book</a> - <a href="https://leanpub.com/implementing-the-clean-architecture">Implementing the Clean Architecture</a>. Then, you can install each component separately during a CI build and validate if you don't try to use anything that's not mentioned in the component's requirements.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>The second approach is simpler - you can use a plugin for pylint I wrote - <a href="https://pypi.org/project/pylint-forbidden-imports/">pylint-forbidden-imports</a>. It lets you specify allowed imports for each component. Example config:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>allowed-modules-dependencies=
+    customer_relationship->auctions,  ; customer_relationship can import code from auctions
+    web_app->*,  ; web_app can import everything
+    *->foundation,  ; foundation can be imported from everything</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>How do I assemble Pythonic modular monolith?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Just like you assemble objects when dealing with composition, you can assemble components. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>In several projects, I used dependency injection library called <a href="https://pypi.org/project/injector/">injector</a> which proved to be extremely valuable as it is not tied to any particular framework. Although it has integrations for Flask and Django as far as I remember. It is also relatively easy to integrate with others. I did in Pyramid and FastAPI.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>For this to work, you define a <code>injector.Module</code> in each of your components, e.g. for auctions:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class Auctions(injector.Module):
+    @injector.provider
+    def placing_bid_uc(
+        self,
+        repo: AuctionsRepository
+    ) -> PlacingBid:
+        return PlacingBid(boundary, repo)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Here, you have a provider (factory) for <code>PlacingBid</code> <em>Use Case</em> class which requires a repository. Injector uses type annotations magic to find a corresponding definition of a dependency. It can be found in <code>AuctionsInfrastructure</code>:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class AuctionsInfrastructure(injector.Module):
+    @injector.provider
+    def auctions_repo(self, conn: Connection) -> AuctionsRepository:
+        return SqlAlchemyAuctionsRepo(conn)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>All you have to do is to create an instance of injector.Injector, passing list of instances of injector.Modules:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>container = injector.Injector(
+    &#91;
+        Auctions(),
+        AuctionsInfrastructure(),
+    ]
+)
+
+# Then you can get an instance with all dependecies using
+containger.get(PlacingBid)
+
+# your code should not use Injector directly - only inject at a top level (e.g. to a view), preferrably using framework integration</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>I recommend doing it in a separate, framework-agnostic component called for example <code>main</code>. <a href="https://github.com/Enforcer/clean-architecture/tree/master/auctioning_platform/main/main">See full example here</a>. Then, different delivery methods of the application (APIs, background task queue, CLI) use <code>main</code> to assemble app and attach proper interface atop of it. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Why should I code using modular monolith approach?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>First of all, it is much simpler and cheaper than microservices but allows for nice code separation. It puts some order to chaos. And that's always welcomed.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>If we don't make any intentional effort towards keeping project clean, we'll create another scary monolithic ball of mud. <em>Divide and conquer!</em></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Even if the project will have to be split eventually, with modular monolith along the way you can experiment with the design and pay much less price if you get the boundaries wrong.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Where can I go from there?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Being able to organize and write code is one thing, but how does one know where to put what...? That's another story which will be described in another article. For now, I can give you a sneak peek - <strong>strategic Domain-Driven Design</strong>. It's a pretty formal and well-recognized methodology of taming large projects.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><strong>Monolith is dead, long live modulith!</strong></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Further reading</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li><a href="https://www.kamilgrzybek.com/design/modular-monolith-primer/">https://www.kamilgrzybek.com/design/modular-monolith-primer/</a></li>
+<li><a href="https://github.com/Enforcer/clean-architecture">https://github.com/Enforcer/clean-architecture</a></li>
+<li><a href="http://www.codingthearchitecture.com/2015/03/08/package_by_component_and_architecturally_aligned_testing.html">http://www.codingthearchitecture.com/2015/03/08/package_by_component_and_architecturally_aligned_testing.html</a></li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>Image source: <a href="https://pixabay.com/pl/illustrations/budowlanych-kolonia-science-fiction-1486781/">https://pixabay.com/pl/illustrations/budowlanych-kolonia-science-fiction-1486781/</a></p>
+<p><!-- /wp:paragraph --></p>

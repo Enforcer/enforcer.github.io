@@ -1,0 +1,142 @@
+---
+layout: post
+title: Stop naming your python modules "utils"
+date: 2020-04-13 09:00:00.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- good practices
+- python
+- software engineering
+tags: []
+permalink: "/stop-naming-your-python-modules-utils/"
+---
+<p><!-- wp:paragraph --></p>
+<p>Imagine the following situation: there is a software developer that is either adding new code or refactoring existing one by extracting a class/function. They have to place code somewhere, but it does not seem to fit anywhere. So what does a developer do? They create a new module - <em>utils.py</em>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Why <em>utils</em> is a terrible name?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p><em>utils</em> is arguably one of the worst names for a module because it is very blurry and imprecise. Such a name does not say what is the purpose of code inside.  On the contrary, a <em>utils</em> module can as well contain almost anything.  By naming a module <em>utils</em>, a software developer lays down perfect conditions for an incohesive code blob. Since the module name does not hint team members if something fits there or not, it is likely that unrelated code will eventually appear there, as more <em>utils</em>. More on it later. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Synonyms of <em>utils</em>, like <em>helpers</em>, <em>commons</em>, etc. are bad for the same reason.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Why people do this?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Excuse I -<em> it is just one function</em></h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Initially, yes - it may be just one function. One function in a badly named module is not that wrong, isn't it?</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>It is. Similarly to the <a href="https://en.wikipedia.org/wiki/Broken_windows_theory">broken windows theory</a>, one occurrence of misbehaviour invites more of them. One function or class in <em>utils</em> is a small problem, indeed. Hence, it should be refactored when it is easy. Once the <em>utils</em> module grows, it will require a lot more effort to split it. And surprise, surprise, no one will be willing to do that.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>How bad it can get? Once, in one Python repository, I saw there were several utils.py modules. My favourite contained 13 various functions and one utility class. What were these functions doing? Everything, from validation to data normalization to saving to the database to sending HTTP requests to getting current datetime formatted accordingly to the format parameter (Yes, separate, loose functions).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>def send_post_request(url, data, logger):
+    ...
+
+def save_details(source_obj, override_data_from_source_obj: dict = None):
+    ...
+
+def normalize_address(address: str) -&gt; str:
+    ...</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>That's how programming hell looks like. <em>utils.py</em> quickly becomes a whirlpool for all code that does not fit other places. It smoothly leads us to excuse number 2...</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Excuse II - <em>There is no other place to put this code</em></h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Indeed, there may be no place that a new class/function fits. Reaction to create a new place for the code is good. However, a programmer needs to put more effort when thinking about the name. As we know, taking the easiest road with <em>utils</em> is a slippery slope.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>We can do better by naming module by the purpose of functions living inside. If they will be creating other objects, let's name it <em>factories.py</em>. If their role is validation - go for <em>validators.py</em>. Maybe we need a few functions that operate on phone numbers? See if they could not be a regular, stateful class PhoneNumber and just put it in a separate file - <em>phone_number.py</em>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>A special case - functions with business logic. There are many techniques for that, some of them are more sophisticated than others (e.g. <a href="https://breadcrumbscollector.tech/the-clean-architecture-in-python-how-to-write-testable-and-flexible-code/">the Clean Architecture</a>) but let's consider a simple case. Assuming we have Django + DRF web application that contains business logic in serializers. We slowly migrate our API to version 2 and we need to put business logic extracted from V1 serializer in some other place, so that serializer V2 may reuse that. DO NOT PUT THIS IN <em>utils.py</em>. Try putting business logic in <em>services.py</em> module. Name <em>service</em> comes from an application service - a single thing that the application does for the clients. If this was, for example, booking a flight, a service could be named <em>flight_booking_service</em> and would:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>authorize payment on customer's payment card</li>
+<li>reserve a flight using 3rd party provider</li>
+<li>send an email (or scheduled a Celery task to do so)</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3> Excuse III <em>I need a place for company commons</em></h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Let's say you are building a distributed application and there are chunks of code that needs to be reused in a majority or all microservices. It is a natural reaction to put them together in someplace, like a separate repository to be installed as a package. But please don't call it {company_name}-utils. I heard about a case of such a repository, but luckily for its maintainers, it was not that big. It contains code responsible for:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>secrets handling, using public cloud services</li>
+<li>logging configuration that uses specific public services</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>As I said, it's not that bad but it would be nice if they were more specific with the name, for example, cloud-toolkit or split that into two separate repositories/packages because frankly there are microservices that use only one of functionalities.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Excuse III - <em>But Django does that</em></h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Yes, there is a couple of utils packages in Django. Shame on them for using <em>utils</em> name. However, notice that at least some of them could be separated from the framework and bundled as optional dependencies. Also, at least they are grouped in cohesive sub-packages - e.g. django.utils.timezone or django.utils.translation. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Unless you are writing a framework, stay away from <em>utils</em>. ;)</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Are all utils bad?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Not exactly. Eventually, one may need a couple of auxiliary functions. In that case, organize such code in modules named by <em>theme</em> - like datetimes, phone_numbers, etc. Such functions should be pure (in terms of functional programming).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:quote --></p>
+<blockquote class="wp-block-quote"><p><strong>Pure Functions</strong>&nbsp;- do not have side effects, that is, they do not change the state of the program. Given the same input, a pure function will always produce the same output.</p>
+<p><cite><a href="https://stackabuse.com/functional-programming-in-python/">https://stackabuse.com/functional-programming-in-python/</a></cite></p></blockquote>
+<p><!-- /wp:quote --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Do not use <em>utils</em> as a name for your Python module neither put it into a class name. Try to be more specific about the role of code - e.g. create a place for <em>validators</em>, <em>services</em> or <em>factories</em>. If the role criterion doesn't help and you really dealing with utils, try grouping code by its theme - </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><em>utils</em> modules are dangerous, because they deteriorate over time. Each and another person that adds something that does not fit anywhere will happily add it to the <em>utils</em> module, increasing its incohesion. The disorder will grow over time, becoming greater and greater burden to work with.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>If you see a newly created <em>utils</em> module in a code review, request it to be renamed. If you are tempted to add something to existing utils, create a new place for your code and move there everything from utils that fits a newly created module.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>In the end, you will exercise your brain to become better at designing code.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><strong>UPDATE:</strong></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>This post has a <a href="https://breadcrumbscollector.tech/where-to-put-all-your-utils-in-python-projects/">follow-up post with an actionable advice on what to do with utils in Python</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Further reading:</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li><a href="http://www.adam-bien.com/roller/abien/entry/util_packages_are_evil">http://www.adam-bien.com/roller/abien/entry/util_packages_are_evil</a></li>
+<li><a href="https://lostechies.com/chrismissal/2009/06/01/anti-patterns-and-worst-practices-utils-class/">https://lostechies.com/chrismissal/2009/06/01/anti-patterns-and-worst-practices-utils-class/</a></li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p><a href="https://pixabay.com/pl/photos/%C5%9Bmieci-pojemnika-na-odpady-odpady-2729608/">Image source</a> </p>
+<p><!-- /wp:paragraph --></p>

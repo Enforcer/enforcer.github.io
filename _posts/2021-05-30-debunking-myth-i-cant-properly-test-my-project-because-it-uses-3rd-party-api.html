@@ -1,0 +1,245 @@
+---
+layout: post
+title: Debunking myth "I can't properly test my project because it uses 3rd party
+  API"
+date: 2021-05-30 22:09:57.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- GRASP
+- python
+- software engineering
+tags: []
+permalink: "/debunking-myth-i-cant-properly-test-my-project-because-it-uses-3rd-party-api/"
+---
+<p><!-- wp:paragraph --></p>
+<p>Welcome to the second post from the GRASP series. GRASP stands for <em>General Responsibility Assignment Software Principles</em>. It is a great aid for Object-Oriented Design (but not really exclusive for OOP!). It is all about putting responsibilities in code structures such as classes/methods/modules in such a way it "makes sense".</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>The challenge</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>A couple of days ago I participated in a certain Slack discussion. A developer complained he finds the quality of the project he works with low. Two main factors are fragile codebase (when a seemingly insignificant change in one part breaks some other stuff) and almost no tests. The more senior devs told the developer that they can't test the app <em>for real</em> because it has integrations with 3rd party APIs.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>I cannot be sure whether this is the whole story or actually the most burning problems. However, I can definitely debunk a myth that 3rd party integrations make it impossible to test the logic of one's application.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Testing the application logic != testing end-to-end</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Before we jump into any code or modelling techniques, let's first clarify what's possible and what's not. Obviously, we often won't be able to automate end-to-end tests that are using the production version of a 3rd party service. In order to do any testing, one has to have the capability to:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>set a system in the desired state</li>
+<li>guarantee isolation between tests</li>
+<li>make calls to the system</li>
+<li>make assertions about the system's state or responses</li>
+<li>(optionally) reset system's state</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>External systems are not controlled by us and can be unpredictable at times. The only way to get them in the desired state would be to issue calls just like our application does in production. It can have consequences that require a manual intervention to undo.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>For the purpose of this article, let's consider a flight reservation system.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:enlighter/codeblock --></p>
+<pre class="EnlighterJSRAW" data-enlighter-language="generic" data-enlighter-theme="" data-enlighter-highlight="" data-enlighter-linenumbers="" data-enlighter-lineoffset="" data-enlighter-title="" data-enlighter-group=""># Get a list of available flights from a given airport to a given airport, on a given date for two adults
+requests.get(".../api/flights?from=JFK&amp;to=LCJ&amp;adults=2date_start=2021-07-01")
+
+# create a booking for a chosen flight etc
+requests.post(".../api/booking", json={...})</pre>
+<p><!-- /wp:enlighter/codeblock --></p>
+<p><!-- wp:paragraph --></p>
+<p>We could use the production 3rd party service to find a flight, then book it. But even the first step is not as simple as it looks like. Flights change over time, airports get closed etc. Such tests are not deterministic and over time give headache due to maintenance burden. <strong>To conclude, 3rd party integration contributes to instability and makes the application more unpredictable.</strong></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>If we cannot test the application end-to-end, what's left? Testing the application itself!</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>The solution - Protected Variations to the rescue!</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>GRASP's response to a problem of instability is to create a <strong>stable interface</strong> around them. This principle is called Protected Variations. Don't get distracted by the word "interface". It doesn't necessarily mean one has to use abstract base classes or create an actual interface if we use another programming language.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Protected Variations only suggest one should write a wrapper around flight service API. It can be a class, a function (if it is just a single entry point) or a module with functions inside. That wrapper or I should rather say interface, has to be stable.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Stable interface</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Stability doesn't stand for immutable code. It rather means that one should do whatever they can to formalize the contract. That involves:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>using type hints</li>
+<li>passing <acronym title="Data Transfer Objects">DTOs</acronym> (e.g. dataclasses) as arguments,</li>
+<li>getting DTOs out</li>
+<li>use dedicated types (e.g. enums) to be more expressive,</li>
+<li>avoid leaking information or nomenclature from the API that is not used throughout the project,</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>Type hints and DTOs are here to enable static code analysis (e.g. mypy). See my other <a href="https://breadcrumbscollector.tech/category/mypy/">posts about mypy and how it can help</a>. Regarding the implementation of DTOs in Python, here's an excellent article on the subject: <a href="https://dev.to/izabelakowal/some-ideas-on-how-to-implement-dtos-in-python-be3">7 ways to implement DTOs in Python and what to keep in mind</a> </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:enlighter/codeblock --></p>
+<pre class="EnlighterJSRAW" data-enlighter-language="generic" data-enlighter-theme="" data-enlighter-highlight="" data-enlighter-linenumbers="" data-enlighter-lineoffset="" data-enlighter-title="" data-enlighter-group="">@dataclass(frozen=True)
+class OneWayFlightsSearch:
+    origin: AirportIataCode
+    destination: AirportIataCode
+    adults: int
+    preferred_start: datetime
+
+
+@dataclass(frozen=True)
+class FlightSearchResult:
+    booking_token: BookingToken
+    total_price: Money
+    number_of_stops: int
+    legs: List[Leg]</pre>
+<p><!-- /wp:enlighter/codeblock --></p>
+<p><!-- wp:paragraph --></p>
+<p>Regarding dedicated data types, we can get more expressive (and type-safe!). You can see a few examples in a snippet above - we have a type for price (<code>Money</code>) or airports - <code>AirportIataCode</code>. Theoretically, we could also create a custom type for the number of adults or stops (only positive integers are valid, not just any!).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Our interface accepts and returns these:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:enlighter/codeblock --></p>
+<pre class="EnlighterJSRAW" data-enlighter-language="generic" data-enlighter-theme="" data-enlighter-highlight="" data-enlighter-linenumbers="" data-enlighter-lineoffset="" data-enlighter-title="" data-enlighter-group="">class FlightsApi:
+    def search_one_way(
+        self, criteria: OneWayFlightsSearch
+    ) -> List[FlightSearchResult]:
+        ...
+        response = requests.get("...")
+        ...
+        return results  # list of FlightSearchResult</pre>
+<p><!-- /wp:enlighter/codeblock --></p>
+<p><!-- wp:paragraph --></p>
+<p>You get the picture of formalizing the contract. One may argue it's a lot of work and additional code. Well, yes it is - but we are not playing <a href="https://en.wikipedia.org/wiki/Code_golf">code golf</a>. We are taming the instability with appropriate countermeasures. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Stable interface - benefits</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>What that stability gives us? Surprisingly plenty.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>we get a stable point to mock/patch in tests <strong>(so we can write acceptance tests of the application! 🎉)</strong>,</li>
+<li>we avoid leaking unnecessary details or information we don't need from a 3rd party,</li>
+<li>we can focus on modelling application logic.</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>Note the most important thing here - <strong>it's the application logic that should dictate how input/output DTOs look like</strong> and what data we return. Not the 3rd party. If we get back raw strings and our application uses dedicated data types, convert it. If some piece of data is returned from the API but we don't need it in the application - don't pack it into DTO. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Other known incarnations of Protected Variations</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:heading {"level":4} --></p>
+<h4>Adapter Design Pattern</h4>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The interface could be seen as an example of Adapter design pattern as described in <em>Design Patterns: Elements of Reusable Object-Oriented Software</em> book. We could move towards referential implementation by introducing an abstract base class. Even without it, the responsibility of our <em>interface</em> is the same - we <strong>adapt</strong> 3rd party service to the application.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":4} --></p>
+<h4>Hexagonal Architecture (AKA Ports &amp; Adapters) or the Clean Architecture</h4>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p><a href="https://alistair.cockburn.us/hexagonal-architecture/">Hexagonal Architecture</a> is an architectural pattern that fosters separating 3rd party inputs and outputs (<em>ports</em> and <em>adapters</em> from the alternative name). A similar approach is promoted by <a href="https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html">Uncle Bob's Clean Architecture</a>. It just uses a different name - it is respectively called <em>interface</em> and <em>interface adapter</em>. Umm, did I mention naming building blocks in IT sucks?</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Nonetheless, for more information about <a href="https://breadcrumbscollector.tech/the-clean-architecture-in-python-how-to-write-testable-and-flexible-code/">the Clean Architecture see my first blog post</a> on the subject and <a href="https://breadcrumbscollector.tech/python-the-clean-architecture-in-2021/">2021 refreshed version</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":4} --></p>
+<h4>RDD Stereotypes - Interfacer</h4>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Our interface also matches a definition of <em>Interfacer</em> - OOP Stereotype, as understood by Responsiblity-Driven Design:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:quote --></p>
+<blockquote class="wp-block-quote"><p>Interfacer - transforms information and requests between distinct parts of our system</p>
+<p><cite>Object Design: Roles, Responsibilities and Collaborations by Rebecca Wirfs-Brock</cite></p></blockquote>
+<p><!-- /wp:quote --></p>
+<p><!-- wp:heading --></p>
+<h2>Testing strategy</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Acceptance tests</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now that we have wrapped a source of instability in our application we can write all acceptance scenarios we need. In these tests, we are going to use test-doubles instead of our interface. You can find an <a href="https://breadcrumbscollector.tech/meet-python-mockito-and-leave-built-in-mock-patch-behind/">introduction to test double types in this article</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Thanks to DTOs and other means of formalizing the contract, we can replace the <code>FlightsApi</code> in tests in a much more reliable way.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Example (simple) scenarios:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>when <code>FlightsApi</code> returns no results, we display an error message</li>
+<li>when <code>FlightsApi</code> booking fails we give money back.</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Interface tests</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>While the application logic can (and should) be tested using more blocks, the wrapper will be tested mostly in isolation from the rest of the system. We would rather focus on checking if the interface obeys the contract (e.g. returns expected DTOs, raises proper exceptions classes in special conditions etc).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>To help ourselves with testing, we may use <a href="https://pypi.org/project/responses/">responses</a> or <a href="https://vcrpy.readthedocs.io/en/latest/">VCR.py</a> libraries - they will help us write tests against actual responses from the API that we'll freeze and reuse. As a result, these tests will be deterministic.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>What if 3rd party service changes API?</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>If your company is merely one of many clients and the API has been published for a long time then the likelihood of a breaking change is rather low. I would not worry too much about that.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>However, if the API is e.g. provided by another team in your company, you may look into contract testing - to make sure your applications understand each other.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:separator --></p>
+<hr class="wp-block-separator" />
+<!-- /wp:separator --></p>
+<p><!-- wp:heading --></p>
+<h2>What would you say for OOP/Design course in Python?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Object-Oriented Design, GRASP, RDD, Design Patterns, Tactical DDD etc. - there are many guidelines on how to design the code and structure projects. Unfortunately, there are not many good resources on that topic for Python. Not to mention a comprehensive learning resource that combines all of them. Blog posts won't cut it hence I thought of creating a course on the subject. Will that be interesting to you?</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>If you would like to know when I finish the course, sign up. You won't get any message from me other than relevant to the course - i.e. when it is released + a discount code for trusting me before even seeing the table of contents.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:mailpoet/subscription-form-block {"formId":3} /--></p>
+<p><!-- wp:separator --></p>
+<hr class="wp-block-separator" />
+<!-- /wp:separator --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>This was a second article about GRASP which introduced a Protected Variations. The latter is a crucial design principle that helps manage sources of instability and variability in the projects by wrapping them with a stable interface.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>It may take a moment to figure out where to exactly draw the line, but it is an investment with great returns. It will work great for projects where 3rd party APIs are used as collaborators for our application. Typical examples are payment providers, some booking services and similar.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Our goal in this design exercise was not to produce something that looks great in a blog post (blogware?!) but rather a practical design that keeps instability at bay. Eventually, as developers, we are to deliver solutions and make sure we can keep doing it over time.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Further reading</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li><a href="https://dev.to/izabelakowal/some-ideas-on-how-to-implement-dtos-in-python-be3">7 ways to implement DTOs in Python and what to keep in mind</a></li>
+<li><a href="https://www.youtube.com/watch?v=eOYal8elnZk">Gary Bernhardt - Boundaries</a></li>
+</ul>
+<p><!-- /wp:list --></p>

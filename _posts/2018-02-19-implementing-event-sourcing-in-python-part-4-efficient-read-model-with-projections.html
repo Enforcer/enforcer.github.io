@@ -1,0 +1,137 @@
+---
+layout: post
+title: Implementing Event Sourcing in Python – part 4, efficient read model with projections
+date: 2018-02-19 23:20:29.000000000 +01:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- event sourcing
+- python
+tags: []
+permalink: "/implementing-event-sourcing-in-python-part-4-efficient-read-model-with-projections/"
+---
+<p><em>This post is a part of <a href="https://breadcrumbscollector.tech/category/event-sourcing/">Implementing Event Sourcing</a> series. It consists of code snippets, thoughts and practical advice how to implement ES in your own project. The contents of this post will probably make the most sense if you also read all other parts. Then you should be ready to use it in your own projects.</em></p>
+<h2>What have we done so far?</h2>
+<p>In the <a href="https://breadcrumbscollector.tech/implementing-event-sourcing-in-python-part-1-aggregates/">part one of Implementing Event Sourcing series</a> I described how to express your logic with event sourcing aggregates. Parts <a href="https://breadcrumbscollector.tech/implementing-event-sourcing-in-python-part-2-robust-event-store-atop-postgresql/">two</a> and <a href="https://breadcrumbscollector.tech/implementing-event-sourcing-in-python-part-3-robust-event-store-atop-rethinkdb/">three</a> discuss things one has to take into consideration while dealing with saving and loading state of aggregates (events, to be exact). So we are already able to write our entire logic. That's great, but that's not the end of Event Sourcing yet.</p>
+<h2>Read models/projections - what is all the fuss about?</h2>
+<p>There is an approach called <em>CQRS</em>. This acronym stands for <em>Command Query Responsibility Segregation</em>. It amounts to create and maintain two separate models of your data. One of them will be for saving, another one for reading. In other words, we will keep our aggregates in more than one way. Why? Because saving and reading operations are efficient for different data formats. That is especially true when we use Event Sourcing. Just imagine querying events table to get all orders with certain criteria met. This can not perform well. Data format we want for <em>write model </em>is something similar to what many people are familiar with - <a href="https://en.wikipedia.org/wiki/Third_normal_form">3rd normal form</a>. In short, that's the way we store data using Django's best practices. We split our data into different models, create relationships via foreign keys etc. Ideally, there is no duplicated data on the write side. <em>Read model</em>, on the other hand, likes data to be denormalized. Ideally, there should not be any JOINS as the data needed for certain view is available to query from one table. So we save the same data at least twice. Once for saving, once or more (depending on how many specialized view models you need) for reading.</p>
+<h3>But wait... Data duplication is bad, isn't?</h3>
+<p>As long as you apply certain standards of hygiene it is not a problem at all:</p>
+<ul>
+<li><em>write model</em> is superior to <em>read model</em></li>
+<li>every change in <em>write model</em> is reflected in <em>reading model</em></li>
+<li><em>read model</em> can not be changed in any way except as a result of altering <em>write model</em></li>
+<li><em>read model</em> is very easy as all read operations are safe for the system</li>
+<li>the whole complexity lies in <em>write model</em> - it is where all business rules have to be enforced, where we need validation etc</li>
+<li>once one needs to change <em>read model</em> format (we add/delete some columns, for example) it is possible to recreate it using <em>save model</em>'s current state</li>
+</ul>
+<h3>What is in it for me?</h3>
+<p>Updating <em>read model</em> can be done asynchronously (we deal with <a href="https://en.wikipedia.org/wiki/Eventual_consistency">Eventual Consistency</a> here) what makes event sourcing architecture sooo scalable. We have to sacrifice consistency for the sake of scalability. Even though some clients may see out-dated information for a very short while, the whole system is protected against <em>saving operations</em> as write model is always consistent. This is guaranteed by proper implementation of an event store.</p>
+<h2>So how do we build read model from write model?</h2>
+<p>This is where another keyword <span id="__w2_h7i5Vcd_answer_content" class="inline_editor_value"><span class="ui_qtext_rendered_qtext">comes onstage - <strong>projections</strong>. <em>Projection</em> is a piece of code that translates a stream of events into data most convenient for reading.</span></span></p>
+<p>Let's say we deal with banking. Our most precious aggregate is called <em>Account</em>. Consider following events used to reconstitute account's state:</p>
+<pre class="lang:python decode:true">class CashOperation(Event):
+
+    account_uuid: uuid.UUID = attr.ib(
+        validator=[attr.validators.instance_of(uuid.UUID)],
+        converter=uuid.UUID
+    )
+    amount: decimal.Decimal = attr.ib(
+        validator=[attr.validators.instance_of(decimal.Decimal)],
+        converter=decimal.Decimal
+    )
+
+    @amount.validator
+    def check(self, _attribute, value):
+        if not value &gt; 0:
+            raise ValueError
+
+    def as_dict(self):
+        return {'amount': str(self.amount), 'name': self.__class__.__name__}
+
+
+class CashDeposited(CashOperation):
+    pass
+
+
+class CashWithdrawn(CashOperation):
+    pass
+</pre>
+<p>We can easily imagine that we will need data saved somewhere to actually get the proper balance without having to iterate through the whole history of cash operations. In other words, we need our <em>projection </em>to maintain rows in such format:</p>
+<pre class="lang:default decode:true">--------------------------------------------------
+|                 uuid                 | balance |
+--------------------------------------------------
+| 4e931a5d-212d-4347-aca4-e0f435b1f37d |  155.00 |
+--------------------------------------------------
+| 3b98b4ec-083a-498d-b8eb-9f68a06eca85 | 6155.00 |
+--------------------------------------------------</pre>
+<p>Code for doing that kind of acrobatics is quite straightforward:</p>
+<pre class="lang:python decode:true">class SqlAlchemyProjection(metaclass=ABCMeta):  # 1
+    def __init__(self, connection: Connection):  # 2
+        # Beginning/closing transaction is not a business of SQL projection
+        self._connection = connection
+
+    @abstractmethod
+    def handle(self, event: Event):  # 3
+        pass
+
+
+class AccountProjection(SqlAlchemyProjection):  # 4
+
+    def handle(self, event: Event):
+
+        @singledispatch  # 5
+        def handle(_event: Event):
+            pass
+
+        @handle.register(CashDeposited)  # 6
+        def _(event: CashDeposited):
+            stmt = accounts.update().where(  # 7
+                accounts.c.uuid == str(event.account_uuid)
+            ).values(balance=accounts.c.balance + event.amount)
+            res = self._connection.execute(stmt)
+
+            if res.rowcount == 0:  # 8
+                self._connection.execute(
+                    accounts.insert().values(uuid=str(event.account_uuid), balance=event.amount)
+                )
+
+        @handle.register(CashWithdrawn)  # 9
+        def _(event: CashWithdrawn):
+            stmt = accounts.update().where(  # 10
+                accounts.c.uuid == str(event.account_uuid)
+            ).values(balance=accounts.c.balance - event.amount)
+            self._connection.execute(stmt)
+
+        handle(event)</pre>
+<ol>
+<li>We start with a base class for all projections that will actually persist our <em>read model</em> in RDBMS. We will use excellent SQLAlchemy ORM for this, but instead of defining models, we'll go for SQLAlchemy Core API, what will give us a bit of performance boost.</li>
+<li>We need a <a href="http://docs.sqlalchemy.org/en/latest/core/connections.html#sqlalchemy.engine.Connection">Connection</a> object to use SQLAlchemy Core. One can be trivially obtained from a <a href="http://docs.sqlalchemy.org/en/latest/orm/session_api.html#sqlalchemy.orm.session.Session.connection">Session</a> or <a href="http://docs.sqlalchemy.org/en/latest/core/connections.html#sqlalchemy.engine.Engine.connect">Engine</a>.</li>
+<li>Every projection will have <em>handle </em>method accepting single argument - Event subclass instance</li>
+<li><em>AccountProjection</em> will take care of inserting/updating rows inside accounts table</li>
+<li>We can leverage <em>singledispatch</em> to avoid writing error-prone <em>if-elif-else</em> block or dictionary handling logic routing. Note that default implementation <em>does nothing </em>as it means we don't support an event that got there</li>
+<li>The handler of <em>CashDeposited</em>...</li>
+<li>...firstly tries to update existing account, adding balance to it</li>
+<li>If we updated zero rows in the previous step it means we don't have an account yet, so we'll create one</li>
+<li>The handler of <em>CashWithdrawn</em>...</li>
+<li>...simply updates the row using <em>account_id </em>by decreasing the balance</li>
+</ol>
+<p>We don't really have to handle situations when for example we try to withdraw cash from a nonexistent account since consistency is handled elsewhere (<em>write model</em>). We just have to make sure that <em>read model </em>gets events in a correct order. This can be dealt with using queuing project, like RabbitMQ.</p>
+<h2>Transactions?</h2>
+<p>A comment in <em>SqlAlchemyProjection </em>class says that projection should not touch transaction at all. There are two different situations that require a different approach:</p>
+<ul>
+<li>projecting single event - in this case, we can BEGIN/COMMIT transaction after each projection's <em>handle </em>method call. Every event is projected in its own transaction</li>
+<li>projecting all events since the beginning - one BEGIN/COMMIT for the entire operation. This gives a performance boost, see <a href="https://www.red-gate.com/simple-talk/sql/performance/comparing-multiple-rows-insert-vs-single-row-insert-with-three-data-load-methods/">this blog post</a> for more information and charts</li>
+</ul>
+<p>Of course, this is applicable only when we store <em>read model</em> in some RDBMS.</p>
+<h3>Should I query for additional data inside projection once I try to denormalize an event?</h3>
+<p>Usually, you should not need to. If you need more data from an aggregate itself, then just add it to the event.</p>
+<h2>How to put projections in my architecture?</h2>
+<p>You will need new service for projecting events that will take care of projecting one event after another. In the beginning single-threaded solution that will dequeue events from your Event Bus (RabbitMQ or something similar) will suffice. Later you can scale your solution and provide separate thread/worker by every projection. <strong>Do not try to add more workers to the same projection. </strong>It would only allow for ugly race conditions and will not increase the speed at all.</p>
+<p><img class="aligncenter size-full wp-image-284" src="{{ site.baseurl }}/assets/2018/02/diagram.png" alt="" width="746" height="242" /></p>
+<p>An important thing to note is that every projection that may be interested in a certain event has to get it. In a simple implementation, we can just send all events to all projections. We might want to optimize it a bit by introducing some routing on <em>Event Bus</em>, but this may be postponed. Different <em>projections</em> change different <em>read models</em>. This will mean updating different tables or even different databases.</p>
+<p>Projecting in Event Sourcing is a very powerful technique!</p>
+<p><em>This post is a part of <a href="https://breadcrumbscollector.tech/category/event-sourcing/">Implementing Event Sourcing</a> series. It consists of code snippets, thoughts and practical advice how to implement ES in your own project. The contents of this post will probably make the most sense if you also read all other parts. Then you should be ready to use it in your own projects.</em></p>

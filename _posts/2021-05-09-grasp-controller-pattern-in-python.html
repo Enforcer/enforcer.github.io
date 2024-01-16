@@ -1,0 +1,243 @@
+---
+layout: post
+title: GRASP Controller pattern in Python
+date: 2021-05-09 21:14:24.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- clean architecture
+- GRASP
+- python
+- software engineering
+tags: []
+permalink: "/grasp-controller-pattern-in-python/"
+---
+<p><!-- wp:paragraph --></p>
+<p>Welcome to the first post from the GRASP series. GRASP stands for <em>General Responsibility Assignment Software Principles</em>. It is a great aid for Object-Oriented Design (but not really exclusive for OOP!). It is all about putting responsibilities in code structures such as classes/methods/modules in such a way it "makes sense".</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Controller - what is it?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>According to the GRASP definition, the Controller is the first object that receives and handles any interaction with the system coming from the User Interface. At the same time, it is considered a good design to decouple UI from logic. Hence, preferably controller should not be one of the UI objects.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>It was all more clear in times of writing desktop apps. Back then, we used technologies like Java Swing or QT (BTW <a href="https://www.qt.io/qt-for-python\">you can use it in Python</a>). When an application has classes for windows, buttons etc it is more obvious they are not a place for business logic. A separate set of objects, more business-oriented would handle it better. When action was to be triggered from the UI, the actual effort for performing action was elsewhere than a UI component. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>This experience coming from building desktop apps can still inspire frontend developers and frameworks authors. However, on the backend things did not become clear. When we build backend service with REST(ful)/GraphQL/gRPC API, we do not have a User Interface anymore. Or do we?</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>API is your UI</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Even though as web apps developers we no longer build UI, our applications do have an interface - their API. The difference is that API is consumed by other systems or applications, not a human. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now, let's consider a Django/Flask/etc application. Let it be a simple TODO list application - adding tasks, viewing and removing them. Let's say it has a RESTful API with a few routes:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>GET /lists/&lt;list_slug&gt;/tasks
+POST /lists/&lt;list_slug&gt;/tasks
+DELETE /lists/&lt;list_slug&gt;/tasks/&lt;task_id&gt;</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>...and no templates - there is a separate frontend application written in a JS/TS framework that is now trendy. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:enlighter/codeblock --></p>
+<pre class="EnlighterJSRAW" data-enlighter-language="generic" data-enlighter-theme="" data-enlighter-highlight="" data-enlighter-linenumbers="" data-enlighter-lineoffset="" data-enlighter-title="" data-enlighter-group="">from collections import defaultdict
+
+from flask import Flask, jsonify
+
+app = Flask(__name__)
+
+
+lists = defaultdict(list)
+ids = iter(range(10_000))
+
+
+@app.route("/lists/&lt;list_slug>/tasks")
+def get_tasks(list_slug: str):
+    return jsonify(lists[list_slug])
+
+@app.route("/lists/&lt;list_slug>/tasks", methods=["POST"])
+def add_task(list_slug: str):
+    lists[list_slug].append({"task_id": next(ids), "text": "test"})
+    return jsonify(lists[list_slug])
+
+@app.route("/lists/&lt;list_slug>/tasks/&lt;task_id>", methods=["DELETE"])
+def detach_task_from_list(list_slug, task_id: int):
+    lists[list_slug] = [t for t in lists[list_slug] if t["task_id"] != int(task_id)]
+    return jsonify(lists[list_slug])</pre>
+<p><!-- /wp:enlighter/codeblock --></p>
+<p><!-- wp:paragraph --></p>
+<p>Which code structure is a GRAPS Controller here? A view! It performs all the logic (even though it is a very simple one). But given what I wrote previously - a view is also a part of the interface. Is it bad to make view a GRASP controller then? <strong>As always, that depends.</strong> For simple use cases - like the one from a tutorial-like todo list app above - it's fine. There are no if statements, no branches, separate handling for different types of users - child's play.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>World beyond tutorials</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Tragically, the real-world projects are not nearly as simple as that TODO list example. Complexity grows if only we keep working on a project and adding new features. If you look at apps like <a href="http://clickup.com">ClickUp.com</a> (which I personally use and recommend!) they surely have lots of interesting code and cases to handle. I hope their code looks nice :D When things get complicated, the burden of framework-specific (interface-specific) stuff becomes a problem. For RESTful example, these are:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>routing</li>
+<li>validation </li>
+<li>authentication</li>
+<li>serialization</li>
+<li>HTTP response codes</li>
+<li>perhaps HTTP caching </li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>The list may vary, depending on the framework and general project architecture. The thing is that when we make our view a GRASP Controller, it is going to change for different reasons.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>GRASP recipe for Controller</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:quote --></p>
+<blockquote class="wp-block-quote"><p>Assign the responsibility to a class representing one of the following choices:</p>
+<p>- Represents the overall "system", a "root object", a device that the software is running within or a major subsystem - these are all variations of a <em>facade controller</em>.</p>
+<p>- Represents a use case scenario within which the system event occurs, often named &lt;UseCaseName&gt;Handler, &lt;UseCaseName&gt;Coordinator, or &lt;UseCaseName&gt;Session (...).</p>
+<p><cite><em>Applying UML and Patterns 3rd edition</em>, Craig Larman</cite></p></blockquote>
+<p><!-- /wp:quote --></p>
+<p><!-- wp:paragraph --></p>
+<p>For the former, consider programming a buying logic for a vending machine. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"align":"center","id":945,"sizeSlug":"large","linkDestination":"none"} --></p>
+<div class="wp-block-image">
+<figure class="aligncenter size-large"><img src="{{ site.baseurl }}/assets/2021/05/japan-682010_640.jpg" alt="" class="wp-image-945" /></figure>
+</div>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>You can choose a product, pay for it. Optionally, you can cancel the transaction after choosing a product but before paying for it. Regardless of whether the user interface will consist of physical buttons or a touch screen, you'd agree the logic shouldn't be implemented there. Assuming the user interface will only trigger other code, we need a Controller. Since there are not many operations possible and they are strongly connected (high cohesion), a root object might be a good idea:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:enlighter/codeblock --></p>
+<pre class="EnlighterJSRAW" data-enlighter-language="generic" data-enlighter-theme="" data-enlighter-highlight="" data-enlighter-linenumbers="" data-enlighter-lineoffset="" data-enlighter-title="" data-enlighter-group="">class VendingMachine:
+    def choose_product(self, number: int) -> None:
+        ...
+
+    def pay_for_selection(self, credit_card_token: str) -> None:
+        ...
+
+    def cancel_selection(self) -> None:
+        ...</pre>
+<p><!-- /wp:enlighter/codeblock --></p>
+<p><!-- wp:paragraph --></p>
+<p>When a number of operations is much higher and they are not so much interdependant (low cohesion), having many controllers is better idea:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:enlighter/codeblock --></p>
+<pre class="EnlighterJSRAW" data-enlighter-language="generic" data-enlighter-theme="" data-enlighter-highlight="" data-enlighter-linenumbers="" data-enlighter-lineoffset="" data-enlighter-title="" data-enlighter-group="">class SettingReminderUseCase:
+    ...
+
+class AddingTaskUseCase:
+    ...
+
+class ArchivingTaskUseCase:
+   ...
+
+class SettingGoalUseCase:
+    ...
+
+class AddingListUseCase:
+    ...
+
+class ArchivingListUseCase:
+    ...</pre>
+<p><!-- /wp:enlighter/codeblock --></p>
+<p><!-- wp:paragraph --></p>
+<p>Obviously, functions would also do:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:enlighter/codeblock --></p>
+<pre class="EnlighterJSRAW" data-enlighter-language="generic" data-enlighter-theme="" data-enlighter-highlight="" data-enlighter-linenumbers="" data-enlighter-lineoffset="" data-enlighter-title="" data-enlighter-group="">def setting_reminder_use_case():
+    ...
+
+def setting_goal_use_case():
+    ...
+
+# etc</pre>
+<p><!-- /wp:enlighter/codeblock --></p>
+<p><!-- wp:heading --></p>
+<h2>GRASP Controller versus the Clean Architecture</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>In the Clean Architecture, the Controller pattern is used explicitly and called <em>Use Case</em> or <em>Interactor</em>. Name Controller does not appear, but what matters is that the responsibility is fulfilled.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:enlighter/codeblock --></p>
+<pre class="EnlighterJSRAW" data-enlighter-language="generic" data-enlighter-theme="" data-enlighter-highlight="" data-enlighter-linenumbers="" data-enlighter-lineoffset="" data-enlighter-title="" data-enlighter-group="">class WithdrawingBidUseCase:
+    def __init__(self, auctions_repo: AuctionsRepository) -> None:
+        self._auctions_repo = auctions_repo
+
+    def withdraw_bids(self, auction_id: AuctionId, bids_ids: List[BidId]) -> None:
+        auction = self._auctions_repo.get(auction_id)
+        for bid_id in bids_ids:
+            auction.withdraw_bid(bid_id)
+        self._auctions_repo.save(auction)</pre>
+<p><!-- /wp:enlighter/codeblock --></p>
+<p><!-- wp:paragraph --></p>
+<p>For a blog post dedicated to <a href="https://breadcrumbscollector.tech/the-clean-architecture-in-python-how-to-write-testable-and-flexible-code/">the Clean Architecture, see my article from 2018</a> or it's updated version - <a href="https://breadcrumbscollector.tech/python-the-clean-architecture-in-2021/">the Clean Architecture in Python in 2021.</a></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>GRASP Controller versus CQRS</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>By the same token, <em>Command</em> + <em>Command Handler</em> from CQRS is a GRASP Controller. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:enlighter/codeblock --></p>
+<pre class="EnlighterJSRAW" data-enlighter-language="generic" data-enlighter-theme="" data-enlighter-highlight="" data-enlighter-linenumbers="" data-enlighter-lineoffset="" data-enlighter-title="" data-enlighter-group="">class PlaceBidCommand:
+    auction_id: AuctionId
+    bidder_id: BidderId
+    amount: Money
+
+
+class PlaceBidHandler:
+    def __init__(self, auctions_repo: AuctionsRepository) -> None:
+        self._auctions_repo = auctions_repo
+ 
+    def __call__(self, command: PlaceBidCommand) -> None:
+       auction = self._auctions_repo.get(command.auction_id)
+       auction.place_bid(command.bidder_id, command.amount)
+       self._auctions_repo.save(auction)</pre>
+<p><!-- /wp:enlighter/codeblock --></p>
+<p><!-- wp:paragraph --></p>
+<p>For more implementation tips on how to implement CQRS, see my blog post about implementing <a href="https://breadcrumbscollector.tech/how-to-implement-and-use-command-bus-in-python-with-injector/">Command Bus with Injector</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>What about application service?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Sometimes our system has a lot of Use Cases (hence hinting towards 2nd version of GRASP Controller - separate classes/functions) but some of them fit together for some reason. In such a case, we may lean to group them together in a single class / module, effectively getting <em>Application Service</em>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:enlighter/codeblock --></p>
+<pre class="EnlighterJSRAW" data-enlighter-language="generic" data-enlighter-theme="" data-enlighter-highlight="" data-enlighter-linenumbers="" data-enlighter-lineoffset="" data-enlighter-title="" data-enlighter-group="">class TokenService:
+    def mint_token(self, user_id: int, auth_code: str) -> None:
+        ...
+
+    def revoke_all_tokens(self, user_id: int) -> None:
+        ...
+
+    def get_tokens_statuses(self, user_id: int) -> Dict[TokenId, TokenStatus]:
+        ...</pre>
+<p><!-- /wp:enlighter/codeblock --></p>
+<p><!-- wp:separator --></p>
+<hr class="wp-block-separator" />
+<!-- /wp:separator --></p>
+<p><!-- wp:block {"ref":988} /--></p>
+<p><!-- wp:separator --></p>
+<hr class="wp-block-separator" />
+<!-- /wp:separator --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>As long as we are dealing with simple logic, we may good with melting Controller into interface-specific class (e.g. API view). When things gets more complex, you may find refactoring Controller out of view a good investment into code quality and readability.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Naturally, you do that from the very start when implementing <a href="https://breadcrumbscollector.tech/the-clean-architecture-in-python-how-to-write-testable-and-flexible-code/">the Clean Architecture</a>. You have separate Use Case classes after all!</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>This was the first post from the series about GRASP. Stay tuned for the next parts! There are 9 GRASP patterns in total. I also strongly recommend a book <em>Applying UML and Patterns</em> written by Craig Larman which is an inspiration for this series. It also contains great, non-trivial examples.</p>
+<p><!-- /wp:paragraph --></p>

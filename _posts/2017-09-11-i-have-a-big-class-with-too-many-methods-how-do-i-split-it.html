@@ -1,0 +1,344 @@
+---
+layout: post
+title: I have a big class with too many methods. How do I split it?
+date: 2017-09-11 14:17:02.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- python
+tags: []
+permalink: "/i-have-a-big-class-with-too-many-methods-how-do-i-split-it/"
+---
+<p>So there you are, with a class that has over 100 (200? 500? 1000?) lines of code in Python. Wow, such an impressive achievement. Life with a monster like this can’t be easy.</p>
+<p>History of our giant class is irrelevant. What's important is that our patient is sick and needs a treatment. We'll cure it, but making a proper diagnosis first is crucial. Then we'll apply appropriate therapy called refactoring. Hopefully lessons learned this way will save you some nerves in the future and help avoiding mistakes.</p>
+<p>Before we take a look at our patient, let me start with telling you what this code is supposed to do. We are building a commercial VOD platform. Access to videos is paid, so we have to implement payments module support. A 3rd party service for <a href="https://en.wikipedia.org/wiki/Payment_gateway">payment gateway</a> has been chosen - <strong>Respectable </strong>(naturally, I made up this one). We still have to write a client code, because <strong>Respectable </strong>does not provide any SDK. At least it has a REST API. To make this example a bit simpler, let's say we need only two of its methods - <em>sale</em> for charging customer's payment card and <em>refund</em> for giving their money back.</p>
+<p>We hand these requirements over to the dev team and after a few days we get an implementation. Please read it carefully to better understand next steps I made:</p>
+<pre class="lang:python decode:true">import urllib.parse
+
+import requests
+from django.conf import settings
+from requests.auth import HTTPBasicAuth
+from requests.exceptions import RequestException
+
+
+logger = logging.getLogger(__name__)
+
+
+class RespectableApiException(Exception):
+    pass
+
+
+class RespectableApi:
+    BASE_URL = settings.RESPECTABLE_API_BASE_URL
+
+    SALE_ACTION = 'sales'
+    REFUND_ACTION = 'refunds'
+
+    def sale(self, payment_card_details, amount):
+        params = self._get_sale_params(payment_card_details, amount)
+        result = self._run_query(params)
+        return self._prase_sale_response(result)
+
+    def refund(self, payment_card_details, amount):
+        params = self._get_refund_params(payment_card_details, amount)
+        result = self._run_query(params)
+        return self._parse_refund_response(result)
+
+    def _get_sale_params(self, payment_card_details, amount):
+        return {
+            'action': self.SALE_ACTION,
+            'pan': payment_card_details.card_number,
+            'cvc': payment_card_details.cvc,
+            'exp_month': payment_card_details.expiration_date.month,
+            'exp_day': payment_card_details.expiration_date.day,
+            'amount': amount
+        }
+
+    def _get_refund_params(self, payment_card_details, amount):
+        return {
+            'action': self.REFUND_ACTION,
+            'pan': payment_card_details.card_number,
+            'amount': amount
+        }
+
+    def _parse_refund_response(self, result):
+        if 'success' not in result or 'refund_amount' not in result:
+            raise RespectableApiException('Malformed refund response: %r', result)
+
+        if result['success'] and result['refund_amount'] &gt; 0:
+            return True
+        else:
+            return False
+
+    def _parse_sale_response(self, result):
+        if 'success' not in result:
+            raise RespectableApiException('Malformed sale response: %r', result)
+
+        return bool(result['success'])
+
+    def _get_auth_data(self):
+        return HTTPBasicAuth(
+            settings.RESPECTABLE_API_USERNAME,
+            settings.RESPECTABLE_API_PASSWORD
+        )
+
+    def _run_query(self, params):
+        url = urllib.parse.urljoin(self.BASE_URL, params['action'])
+        del params['action']
+
+        auth = self._get_auth_data()
+
+        logger.info('Sending request to %s with amount %s', url, params['amount'])
+        try:
+            response = requests.post(url, json=params, auth=auth)
+        except RequestException as e:
+            logger.info(
+                'Request to %s with amount %s failed with exception',
+                url, params['amount'], e
+            )
+            raise RespectableApiException('Request failed')
+        logger.info(
+            'Sent request to %s with amount %s, response %r',
+            url, params['amount'], response
+        )
+
+        decoded_response = response.json()
+
+        if response.status_code == 200:
+            return decoded_response
+        else:
+            try:
+                error_message = decoded_response['error']
+            except KeyError:
+                error_message = 'Request failed with status {}'.format(response.status_code)
+
+            raise RespectableApiException(error_message)
+</pre>
+<p>There are few different problems with this class, but let's start with the most noticeable one - its size. <strong>RespectableApi </strong>is so big because it combines several responsibilites - communication with external API through requests library, parsing responses, handling errors. It exposes two public methods - <em>sale</em> and <em>refund</em>. The rest of code in this class is just for these methods, which are very similar by the way.</p>
+<h2>Mixins!</h2>
+<p>Let's try splitting the class. You might think of an approach with mixins. First, we take all the code that is used by both <em>sale</em> and <em>refund</em> and create some fuzzy <strong>Base</strong> class:</p>
+<pre class="lang:python decode:true">class BaseRespectableApi:
+    BASE_URL = settings.RESPECTABLE_API_BASE_URL
+
+    def _get_auth_data(self):
+        return HTTPBasicAuth(
+            settings.RESPECTABLE_API_USERNAME,
+            settings.RESPECTABLE_API_PASSWORD
+        )
+
+    def _run_query(self, params):
+        url = urllib.parse.urljoin(self.BASE_URL, params['action'])
+        del params['action']
+
+        auth = self._get_auth_data()
+
+        logger.info('Sending request to %s with amount %s', url, params['amount'])
+        try:
+            response = requests.post(url, json=params, auth=auth)
+        except RequestException as e:
+            logger.info(
+                'Request to %s with amount %s failed with exception',
+                url, params['amount'], e
+            )
+            raise RespectableApiException('Request failed')
+        logger.info(
+            'Sent request to %s with amount %s, response %r',
+            url, params['amount'], response
+        )
+
+        decoded_response = response.json()
+
+        if response.status_code == 200:
+            return decoded_response
+        else:
+            try:
+                error_message = decoded_response['error']
+            except KeyError:
+                error_message = 'Request failed with status {}'.format(response.status_code)
+
+            raise RespectableApiException(error_message)</pre>
+<p>Then we take remaining bits of code and create two smaller classes (mixins) for each API method:</p>
+<pre class="lang:default decode:true">class RefundRespectableApiMethodMixin:
+
+    REFUND_ACTION = 'refunds'
+
+    def refund(self, payment_card_details, amount):
+        params = self._get_refund_params(payment_card_details, amount)
+        result = self._run_query(params)
+        return self._parse_refund_response(result)
+
+    def _get_refund_params(self, payment_card_details, amount):
+        return {
+            'action': self.REFUND_ACTION,
+            'pan': payment_card_details.card_number,
+            'amount': amount
+        }
+
+    def _parse_refund_response(self, result):
+        if 'success' not in result or 'refund_amount' not in result:
+            raise RespectableApiException('Malformed refund response: %r', result)
+
+        if result['success'] and result['refund_amount'] &gt; 0:
+            return True
+        else:
+            return False
+
+class SaleRespectableApiMethodMixin:
+
+    SALE_ACTION = 'sales'
+
+    def sale(self, payment_card_details, amount):
+        params = self._get_sale_params(payment_card_details, amount)
+        result = self._run_query(params)
+        return self._prase_sale_response(result)
+
+    def _get_sale_params(self, payment_card_details, amount):
+        return {
+            'action': self.SALE_ACTION,
+            'pan': payment_card_details.card_number,
+            'cvc': payment_card_details.cvc,
+            'exp_month': payment_card_details.expiration_date.month,
+            'exp_day': payment_card_details.expiration_date.day,
+            'amount': amount
+        }
+
+    def _parse_sale_response(self, result):
+        if 'success' not in result:
+            raise RespectableApiException('Malformed sale response: %r', result)
+
+        return bool(result['success'])</pre>
+<p>And finally we tie all three together to be able to use it just like we did before:</p>
+<pre class="lang:default decode:true">class RespectableApi(BaseRespectableApi, RefundRespectableApiMethodMixin, SaleRespectableApiMethodMixin):
+    pass</pre>
+<p>So now we have four significantly smaller classes with a bit of code separation. All <em>sale</em> specific code now belongs to <em>SaleRespectableApiMethodMixin</em> class. So is true with <em>refund</em> and its <em>RefundRespectableApiMethodMixin</em>.</p>
+<p>Is that a good code we can live with?</p>
+<p><img class="aligncenter size-full wp-image-205" src="{{ site.baseurl }}/assets/2017/09/noooo.png" alt="" width="480" height="360" /></p>
+<p>There is a designated area in hell for people creating such abominations. It does not really help with coupling between API methods and transport mechanism which is REST in this case. Imagine how it would look like to add support for more API methods. A nightmare.</p>
+<p>In fact, reading this code to fully understand what <strong>RespectableApi</strong> is requires a lot of jumping through all classes involved. They will be probably scattered through few files. Having them in just one .py file makes situation even worse. Cognition load is not reduced - it is increased by extra classes. At least changing anything in <em>sale</em> specific code won't break <em>refunds</em> and vice versa.</p>
+<p>Usually this approach is the worst idea you might have.</p>
+<h2>Inheritance and standalone API commands classes</h2>
+<p>A slightly better approach is to use <strong>BaseRespectableApi </strong>as a base class for our API methods, so we'll get:</p>
+<pre class="lang:python decode:true">class RefundRespectableApiMethod(BaseRespectableApi):
+
+    REFUND_ACTION = 'refunds'
+
+    def refund(self, payment_card_details, amount):
+        params = self._get_refund_params(payment_card_details, amount)
+        result = self._run_query(params)
+        return self._parse_refund_response(result)
+
+    def _get_refund_params(self, payment_card_details, amount):
+        return {
+            'action': self.REFUND_ACTION,
+            'pan': payment_card_details.card_number,
+            'amount': amount
+        }
+
+    def _parse_refund_response(self, result):
+        if 'success' not in result or 'refund_amount' not in result:
+            raise RespectableApiException('Malformed refund response: %r', result)
+
+        if result['success'] and result['refund_amount'] &gt; 0:
+            return True
+        else:
+            return False
+
+class SaleRespectableApiMethod(BaseRespectableApi):
+
+    SALE_ACTION = 'sales'
+
+    def sale(self, payment_card_details, amount):
+        params = self._get_sale_params(payment_card_details, amount)
+        result = self._run_query(params)
+        return self._prase_sale_response(result)
+
+    def _get_sale_params(self, payment_card_details, amount):
+        return {
+            'action': self.SALE_ACTION,
+            'pan': payment_card_details.card_number,
+            'cvc': payment_card_details.cvc,
+            'exp_month': payment_card_details.expiration_date.month,
+            'exp_day': payment_card_details.expiration_date.day,
+            'amount': amount
+        }
+
+    def _parse_sale_response(self, result):
+        if 'success' not in result:
+            raise RespectableApiException('Malformed sale response: %r', result)
+
+        return bool(result['success'])</pre>
+<p>The good part is that clients of Respectable API still have to use just one class (<strong>SaleRespectableApiMethod</strong> or <strong>RefundRespectableApiMethod</strong>) to achieve what they need. Code of <em>sales</em> is completely separated from <em>refunds</em>. But again, this solution does not reduce complexity of individualy API method. It still relies on a base class and we have to read it to fully understand what a single <strong>ApiMethod</strong> class does when it's invoked. Inheritance introduces a very rigid dependency between classes.</p>
+<h2>Separation by concerns</h2>
+<p>Wait, there must be a better way. There is one. Let's split code by concerns it should care about.</p>
+<p><strong>RespectableAPI </strong>- main class that will handle REST communication and handling errors. We could also move transport details to another class, but this could obfuscate this example (and obviously there is no visible value in this since this is the only transport mechanism <strong>Respectable</strong> handles). It will have one public method <em>execute</em>, that will accept...</p>
+<p><strong>RespectableAPIMethod</strong> - abstract base class for all API methods. It does not use (neither know anything about) <strong>RespectableAPI</strong>. The latter uses methods defined in base class to prepare params and parse response.</p>
+<p><strong>SaleRespectableAPIMethod</strong>, <strong>RefundRespectableAPIMethod</strong> - concrete classes inheriting from <strong>RespectableAPIMethod</strong>.</p>
+<p>Let's take a look at code:</p>
+<pre class="lang:python decode:true">class RespectableApi:
+    BASE_URL = settings.RESPECTABLE_API_BASE_URL
+
+    def execute(api_method):
+        params = api_method.get_params()
+        result = self._run_query(params)
+        return api_method.parse_response(result)
+
+    def _get_auth_data(self):
+        ... #  irrelevant, no changes
+
+    def _run_query(self, params):
+        ... #  irrelevant, no changes</pre>
+<p>As you can see, <em>execute </em>method argument should be an object with two methods: <em>get_params</em> and <em>parse_response</em>. Base class for API methods looks like this:</p>
+<pre class="lang:python decode:true">class BaseRespectableApiMethod(metaclass=abc.ABCMeta):
+
+    @abc.abstractmethod
+    def get_params(self):
+        pass
+
+    @abc.abstractmethod
+    def parse_response(self):
+        pass</pre>
+<p>Implementation of <em>refund</em> (I omit <em>sale</em>, because it won't contribute much at this stage):</p>
+<pre class="lang:python decode:true">class RefundRespectableApiMethod(BaseRespectableApiMethod):
+
+    REFUND_ACTION = 'refunds'
+
+    def __init__(self, payment_card_details, amount):
+        self.payment_card_details = payment_card_details
+        self.amount = amount
+
+    def get_params(self, payment_card_details, amount):
+        return {
+            'action': self.REFUND_ACTION,
+            'pan': payment_card_details.card_number,
+            'amount': amount
+        }
+
+    def parse_response(self, result):
+        if 'success' not in result or 'refund_amount' not in result:
+            raise RespectableApiException('Malformed refund response: %r', result)
+
+        if result['success'] and result['refund_amount'] &gt; 0:
+            return True
+        else:
+            return False</pre>
+<p>Notice that we no longer need to pass extra arguments to execute method, because they are saved in <strong>RefundRespectableApiMethod</strong> instance.</p>
+<p>To me, this is the most elegant solution of all three presented in this article. API methods classes are small and can be very easily unit tested. Our original class, <strong>RespectableApi</strong>, is now simpler.</p>
+<p>Adding new API methods should not be any pain in the neck.</p>
+<p>The downside is that now client has to use two classes to achieve what they want instead of one. We can still be nice though if we hide this little inconvenience using <strong>Facade</strong> design pattern:</p>
+<pre class="lang:python decode:true ">class RespectableApiFacade:
+    def sale(payment_details, amount):
+        api_method = SaleRespectableApiMethod(payment_details, amount)
+        api_gateway = RespectableApi()
+        return api_gateway.execute(api_method)
+
+    def refund(payment_details, amount):
+        api_method = RefundRespectableApiMethod(payment_details, amount)
+        api_gateway = RespectableApi()
+        return api_gateway.execute(api_method)</pre>
+<p>&nbsp;</p>
+<p>&nbsp;</p>
+<p>That's all folks. Looking forward to hearing from you about other patterns/approaches to decoupling code.</p>
+<p><strong>DISCLAIMER</strong>: Code in this post was hardly tested, because it was not taken from a piece of working software. My intention was to present an idea, not to provide working examples.</p>

@@ -1,0 +1,459 @@
+---
+layout: post
+title: Meet python-mockito and leave built-in mock & patch behind
+date: 2021-04-18 18:40:19.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- python
+tags: []
+permalink: "/meet-python-mockito-and-leave-built-in-mock-patch-behind/"
+---
+<p><!-- wp:heading --></p>
+<h2>Batteries included can give you headache</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p><code>unittest.mock.[Magic]Mock</code> and <code>unittest.patch</code> are powerful utilities in the standard library that can help us in writing tests. Although it is easy to start using them, there are several pitfalls waiting for unaware beginners. For example, forgetting about <strong>optional</strong> <code>spec</code> or <code>spec_set</code> can give us green tests for code that will fail in prod immediately. You can find several other examples + solutions in the second half of my other post - <a href="https://breadcrumbscollector.tech/how-to-mock-in-python-almost-definitive-guide/">How to mock in Python? Almost definitive guide</a>. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Last but not least - <strong>vocabulary used in the standard library stands at odds with the general testing nomenclature</strong>. This has a negative effect on learning effective testing techniques. Whenever a Pythonista needs to replace a dependency in tests, they use a mock. Generally, we call this type of replacement object<em>Test Double</em>. Mock is merely one specialized type of a <em>Test Double</em>. What is more, there are limited situations when it's <strong>the right</strong> <em>Test Double</em>. You can find more details in Robert Martin's post <a href="https://blog.cleancoder.com/uncle-bob/2014/05/14/TheLittleMocker.html">The Little Mocker</a>. Or just stay with me for the rest of this article - I'll guide you through. :) To summarise, if a philosopher Ludwig Wittgenstein was right by saying...</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:quote --></p>
+<blockquote class="wp-block-quote"><p>The limits of my language means the limits of my world</p>
+</blockquote>
+<p><!-- /wp:quote --></p>
+<p><!-- wp:paragraph --></p>
+<p>...then Pythonistas are missing A LOT by sticking to "mocking".</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>python-mockito - a modern replacement for Python mock &amp; patch</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>It is said that experience is the best teacher. However, experience does not have to be our own - if we can learn from others' mistakes, then it's even better. Developers of other programming languages also face the challenges of testing. The library I want to introduce to you - <a href="https://mockito-python.readthedocs.io/en/latest/">python-mockito</a> - is a port of Java's testing framework with the same name. <strong>It's safe by default</strong> unlike mock from the standard library. python-mockito has a nice, easy to use API. It also helps you with the maintenance of your tests by being very strict about unexpected behaviours. Plus, it has a pytest integration - <a href="https://pypi.org/project/pytest-mockito/">pytest-mockito</a> for seamless use and automatic clean up.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Introduction to test double types</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>I must admit that literature is not 100% consistent on taxonomy of test doubles, but generally accepted definitions are:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>Dummy - an object required to be passed around (e.g. to <code>__init__</code>) but often is not used at all during test execution</li>
+<li>Stub - an object returning hardcoded data which was set in advance before test execution</li>
+<li>Spy - an object recording interactions and exposing API to query it for (e.g. which methods were called and with what arguments)</li>
+<li>Mock - an object with calls expectations set in advance before test execution</li>
+<li>Fake - an object that behaves just like a production counterpart, but has a simpler implementation that makes it unusable outside tests (e.g. in-memory storage).</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>If that's the first time you see test double types and you find it a bit imprecise or overlapping, that's good. Their implementation can be similar at times. What makes a great difference is how they are used during the<strong> </strong>Assert phase of a test. (Quick reminder - a typical test consists of Arrange - Act - Assert phases).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>A great rule of thumb I found recently gives following hints when to use which type:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>use Dummy when a dependency is expected to remain unused</li>
+<li>use Stub for read-only dependency</li>
+<li>use Spy for write-only dependency</li>
+<li>use Mock for write-only dependency used across a few tests (DRY expectation)</li>
+<li>use Fake for dependency that's used for both reading and writing.</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>plus mix features when needed or intentionally break the rules when you have a good reason to do so.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>This comes from <em>The Test Double Rule of Thumb</em> article by Matt Parker, linked at the end of this post.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><strong>Of course we use test doubles only when we have to.</strong> Don't write only unit-tests separately for each class/function, please.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>python-mockito versus built-in mock and patch</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Installation</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>I'm using Python3.9 for the following code examples. unitttest.mock is included. To get python-mockito run </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>pip install mockito pytest-mockito</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>pytest-mockito will be get handy a bit later ;)</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Implementing Dummy</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Sometimes Dummy doesn't even require any test double library. When a dependency doesn't really have any effect on the test and/or is not used during execution, we could sometimes pass just always <code>None</code>. If mypy (or other type checker) complains and a dependency is simple to create (e.g. it is an <code>int</code>), we create and pass it.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>def test_sends_request_to_3rd_party():
+    # setting up spy (ommitted)
+    interfacer = ThirdPartyInterfacer(max_returned_results=0)  # "0" is a dummy
+    
+    interfacer.create_payment(...)
+
+    # spy assertions (ommitted)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>If a dependency is an instance of a more complex class, then we can use <code>unittest.mock.Mock</code> + <code>seal</code> or <code>mockito.mock</code>. In the following example, we'll be testing <code>is_healthy</code> method of some Facade. Facades by design can get a bit incohesive and use dependencies only in some methods. Dummy is an ideal choice then:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from logging import Logger
+
+from unittest.mock import Mock, seal
+from mockito import mock
+
+
+class PaymentsFacade:
+    def __init__(self, logger: Logger) -&gt; None:
+        self._logger = logger
+
+    def is_healthy(self) -&gt; bool:
+        # uncomment this line if you want to see error messages
+        # self._logger.info("Checking if is healthy!")
+        return True
+
+
+def test_returns_true_for_healthcheck_stdlib():
+    logger = Mock(spec_set=Logger)
+    seal(logger)
+    facade = PaymentsFacade(logger)
+
+    assert facade.is_healthy() is True
+
+
+def test_returns_true_for_healthcheck_mockito():
+    logger = mock(Logger)
+    facade = PaymentsFacade(logger)
+
+    assert facade.is_healthy() is True</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>python-mockito requires less writing and also error message is much better (at least in Python 3.9). Unittest Mock (part of a HUGE stack trace):</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>        if self._mock_sealed:
+            attribute = "." + kw&#91;"name"] if "name" in kw else "()"
+            mock_name = self._extract_mock_name() + attribute
+&gt;           raise AttributeError(mock_name)
+E           AttributeError: mock.info  # WTH?
+
+/Library/Frameworks/Python.framework/Versions/3.9/lib/python3.9/unittest/mock.py:1017: AttributeError</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>python-mockito:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>self = &lt;dummy.PaymentsFacade object at 0x7fb3880cba00&gt;
+
+    def is_healthy(self) -&gt; bool:
+&gt;       self._logger.info("Checking if is healthy!")
+E       AttributeError: 'Dummy' has no attribute 'info' configured  # CLEAR
+
+dummy.py:12: AttributeError</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><em>Dummies</em> are useful when we know they will not (or should not) be used during the test execution. As a side note, dependencies like logger are rarely problematic in tests and we could also write the same test scenario without using test double at all.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Implementing Stub</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>With stubs we are only interested in ensuring they will return some pre-programmed data. <strong>WE DO NOT EXPLICITLY VERIFY IF THEY WERE CALLED</strong> <strong>DURING ASSERT</strong>. Ideally, we should see if they were used or not purely by looking at the test itself.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>In the following example, our <code>PaymentsFacade</code> has a dependancy on <code>PaymentsProvider</code> that is an interfacer to some external API. Obviously, we cannot use the real implementation it in the test. For this particular case, we have a read-only collaboration. Facade asks for payment status and interprets it to tell if the payment is complete.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from enum import Enum
+
+from unittest.mock import Mock, seal
+from mockito import mock
+
+
+class PaymentStatus(Enum):
+    AUTHORIZED = 'AUTHORIZED'
+    CAPTURED = 'CAPTURED'
+    RELEASED = 'RELEASED'
+
+
+
+class PaymentsProvider:
+    def __init__(self, username: str, password: str) -&gt; None:
+        self._auth = (username, password)
+
+    def get_payment_status(self, payment_id: int) -&gt; PaymentStatus:
+        # make some requests using auth info
+        raise NotImplementedError
+
+
+class PaymentsFacade:
+    def __init__(self, provider: PaymentsProvider) -&gt; None:
+        self._provider = provider
+
+    def is_paid(self, payment_id: int) -&gt; None:
+        status = self._provider.get_payment_status(payment_id)
+        is_paid = status == PaymentStatus.CAPTURED
+        return is_paid
+
+
+def test_returns_true_for_status_captured_stdlib():
+    provider = Mock(spec_set=PaymentsProvider)
+    provider.get_payment_status = Mock(return_value=PaymentStatus.CAPTURED)
+    seal(provider)
+    facade = PaymentsFacade(provider)
+
+    assert facade.is_paid(1) is True
+
+
+def test_returns_true_for_status_captured_mockito(when):
+    provider = mock(PaymentsProvider)
+    when(provider).get_payment_status(2).thenReturn(PaymentStatus.CAPTURED)
+    facade = PaymentsFacade(provider)
+
+    assert facade.is_paid(2) is True</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>python-mockito gives a test-specific api. <code>when</code> (coming from pytest-mockito) is called on a mock specifying the argument. Next, <code>thenReturn</code> defines what will be returned. Analogously, there is a method <code>thenRaise</code> for raising an exception. Notice a difference (except length) - if we called a mock with an unexpected argument, mockito raises an exception:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>def test_returns_true_for_status_captured_mockito(when):
+    provider = mock(PaymentsProvider)
+    when(provider).get_payment_status(2).thenReturn(PaymentStatus.CAPTURED)
+    facade = PaymentsFacade(provider)
+
+    assert facade.is_paid(3) is True  # stub is configured with 2, not 3
+
+# stacktrace
+    def is_paid(self, payment_id: int) -&gt; None:
+&gt;       status = self._provider.get_payment_status(payment_id)
+E       mockito.invocation.InvocationError:
+E       Called but not expected:
+E
+E           get_payment_status(3)
+E
+E       Stubbed invocations are:
+E
+E           get_payment_status(2)
+
+stub.py:28: InvocationError</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>If we don't want this behaviour, we can always use ellipsis:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>def test_returns_true_for_status_captured_mockito(when):
+    provider = mock(PaymentsProvider)
+    when(provider).get_payment_status(...).thenReturn(PaymentStatus.CAPTURED)
+    facade = PaymentsFacade(provider)
+
+    assert facade.is_paid(3) is True</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>If we want to remain safe in every case, we should also use type checker (e.g. mypy).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Digression - patching</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p><code>when</code> can be also used for patching. Let's assume <code>PaymentsFacade</code> for some reason creates an instance of <code>PaymentsProvider</code>, so we cannot explicitly pass mock into <code>__init__</code>:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class PaymentsFacade:
+    def __init__(self) -&gt; None:
+        self._provider = PaymentsProvider(
+            os.environ&#91;"PAYMENTS_USERNAME"],
+            os.environ&#91;"PAYMENTS_PASSWORD"],
+        )
+
+    def is_paid(self, payment_id: int) -&gt; None:
+        status = self._provider.get_payment_status(payment_id)
+        is_paid = status == PaymentStatus.CAPTURED
+        return is_paid</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Then, monkey patching is a usual way to go for Pythonistas:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>def test_returns_true_for_status_captured_stdlib_patching():
+    with patch.object(PaymentsProvider, "get_payment_status", return_value=PaymentStatus.CAPTURED) as mock:
+        seal(mock)
+        facade = PaymentsFacade()
+
+        assert facade.is_paid(1) is True
+
+
+def test_returns_true_for_status_captured_mockito_patching(when):
+    when(PaymentsProvider).get_payment_status(...).thenReturn(
+        PaymentStatus.CAPTURED
+    )
+    facade = PaymentsFacade()
+
+    assert facade.is_paid(3) is True</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>python-mockito implementation is even shorter with patching than without it. But do not treat this as an invitation for patching :) An important note - context manager with <code>patch.object</code> makes sure there is a cleanup. For pytest, I strongly recommend using fixtures provided by pytest-mockito. They will do cleanup automatically for you, Otherwise, one would have to call function <code>mockito.unstub</code> manually. More details in the documentation of pytest-mockito and python-mockito. Documentation of python-mockito states there is also a way to use it with context managers, but personally I've never done so.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Monkey patching is dubious practice at best - especially if done on unstable interfaces. It should be avoided because it tightly couples tests with the implementation. It can be your last resort, though. The frequent need for patching in tests is a strong indicator of untestable design or poor test or both.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Digression - pytest integration</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>For daily use with the standard library mocks, there is a lib called <a href="https://pypi.org/project/pytest-mock/">pytest-mock</a>. It provides mocker fixture for easy patching and automatic cleanup. The outcome is similar to pytest-mockito.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Implementing Spy</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now, let's consider a scenario of starting a new payment. <code>PaymentsFacade</code> calls <code>PaymentsProvider</code> after validating input and converting money amount to conform to API's expectation.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from dataclasses import dataclass
+from decimal import Decimal
+
+from unittest.mock import Mock, seal
+from mockito import mock, verify
+
+
+@dataclass(frozen=True)
+class Money:
+    amount: Decimal
+    currency: str
+
+    def __post_init__(self) -&gt; None:
+        if self.amount &lt; 0:
+            raise ValueError("Money amount cannot be negative!")
+
+
+class PaymentsProvider:
+    def __init__(self, username: str, password: str) -&gt; None:
+        self._auth = (username, password)
+
+    def start_new_payment(self, card_token: str, amount: int) -&gt; None:
+        raise NotImplementedError
+
+
+class PaymentsFacade:
+    def __init__(self, provider: PaymentsProvider) -&gt; None:
+        self._provider = provider
+
+    def init_new_payment(self, card_token: str, money: Money) -&gt; None:
+        assert money.currency == "USD", "Only USD are currently supported"
+        amount_in_smallest_units = int(money.amount * 100)
+        self._provider.start_new_payment(card_token, amount_in_smallest_units)
+
+
+def test_calls_provider_with_799_cents_stdlib():
+    provider = Mock(spec_set=PaymentsProvider)
+    provider.start_new_payment = Mock(return_value=None)
+    seal(provider)
+    facade = PaymentsFacade(provider)
+
+    facade.init_new_payment("nonsense", Money(Decimal(7.99), "USD"))
+
+    provider.start_new_payment.assert_called_once_with("nonsense", 799)
+
+
+def test_calls_provider_with_1099_cents_mockito(when):
+    provider = mock(PaymentsProvider)
+    when(provider).start_new_payment(...).thenReturn(None)
+    facade = PaymentsFacade(provider)
+
+    facade.init_new_payment("nonsense", Money(Decimal(10.99), "USD"))
+
+    verify(provider).start_new_payment("nonsense", 1099)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Here, a major difference between unittest.mock and mockito is that the latter:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>lets us specify input arguments (not shown here, but present in previous examples) </li>
+<li>(provided input arguments were specified) fails if there are any additional, unexpected interactions.</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>The second behaviour is added by pytest-mockito that apart from calling <code>unstub</code> automatically, it also calls <code>verifyNoUnwantedInvocations</code>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Implementing Mock</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Let's consider identical test scenario as for Spy - but this time assume we have some duplication in verification and want to refactor Spy into Mock. Now, the funniest part - it turns out that standard library that has only classes called "Mock" does not really make it any easier to create mocks as understood by literature. On the other hand, it's such a simple thing that we can do it by hand without any harm. To make this duel even, I'll use pytest fixtures for both:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>@pytest.fixture()
+def stdlib_provider():
+    provider = Mock(spec_set=PaymentsProvider)
+    provider.start_new_payment = Mock(return_value=None)
+    seal(provider)
+    yield provider
+    provider.start_new_payment.assert_called_once_with("nonsense", 799)
+
+
+def test_returns_none_for_new_payment_stdlib(stdlib_provider):
+    facade = PaymentsFacade(stdlib_provider)
+
+    result = facade.init_new_payment("nonsense", Money(Decimal(7.99), "USD"))
+
+    assert result is None
+
+
+@pytest.fixture()
+def mockito_provider(expect):
+    provider = mock(PaymentsProvider)
+    expect(provider).start_new_payment("nonsense", 1099)
+    return provider
+
+
+def test_returns_none_for_new_payment_mockito(mockito_provider):
+    facade = PaymentsFacade(mockito_provider)
+
+    result = facade.init_new_payment("nonsense", Money(Decimal(10.99), "USD"))
+
+    assert result is None</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><code>expect</code> will also call <code>verifyUnwantedInteractions</code> to make sure there are no unexpected calls.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Implementing Fake</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>For Fakes, there are no shortcuts or libraries. We are better off writing them manually. You can find an example here - <a href="https://github.com/Enforcer/clean-architecture/blob/master/auctioning_platform/auctions/auctions/tests/in_memory_repo.py#L10">InMemoryAuctionsRepository</a> . It is meant to be a test double for a real implementation that uses a relational database.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Initially this blog post was meant to be only about the tool, but I couldn't resist squeezing in some general advice about testing techniques. ;)</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>While python-mockito does not solve an issue with calling every test double a mock, it definitely deserves attention. Test doubles created with it require less code and are by default much more secure and strict than those using <code>unittest.mock</code>. Regarding cons, camelCasing can be a little distracting at first, but this is not a huge issue. The most important thing is that safety we get out-of-the-box with python-mockito has been being added to python standard library over several versions and is not as convenient.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>I strongly recommend to read python-mockito's documentation and try it out!</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Further reading</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li><a href="https://pypi.org/project/mockito/">python-mockito</a></li>
+<li><a href="https://pypi.org/project/pytest-mockito/">pytest-mockito</a></li>
+<li><a href="https://martinfowler.com/articles/mocksArentStubs.html">Mocks aren't Stubs</a> by Martin Fowler</li>
+<li><a href="https://www.amazon.com/xUnit-Test-Patterns-Refactoring-Code/dp/0131495054\">xUnit Test Patterns: Refactoring Test Code</a> by Gerard Meszaros</li>
+<li><a href="https://web.archive.org/web/20210116023502/https://engineering.pivotal.io/post/the-test-double-rule-of-thumb/">The Test Double Rule of Thumb</a></li>
+</ul>
+<p><!-- /wp:list --></p>

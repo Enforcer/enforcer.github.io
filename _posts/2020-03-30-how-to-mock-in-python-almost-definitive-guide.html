@@ -1,0 +1,447 @@
+---
+layout: post
+title: How to mock in Python? - (almost) definitive guide
+date: 2020-03-30 13:00:00.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- python
+- testing software
+tags: []
+permalink: "/how-to-mock-in-python-almost-definitive-guide/"
+---
+<p><!-- wp:heading --></p>
+<h2>What is a mock?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Mock is a category of so-called <em>test doubles</em> - objects that mimic the behaviour of other objects. They are meant to be used in tests to replace real implementation that for some reason cannot be used (.e.g because they cause side effects, like transferring funds or launching nukes). Mocks are used to write assertions about the way they are used - e.g. if they were called, which arguments were used etc. It is a flagship technique of <a href="http://spockframework.org/spock/docs/1.0/interaction_based_testing.html">interaction-based testing</a> - checking how <em>objects under test</em> use their collaborators (other objects).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from unittest import main, TestCase
+from unittest.mock import Mock
+
+def foo(some_object, number):
+    if number > 2:
+        some_object.method(number ** 2)
+    else:
+        some_object.method(number - 1)
+
+class FooTests(TestCase):
+    def test_foo_for_2_calls_method_with_1(self):
+        some_object = Mock(method=Mock())
+
+        foo(some_object, 2)
+
+        some_object.method.assert_called_once_with(1)
+
+if __name__ == '__main__': main()</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>That being said, Python mocks can also be used as stubs - another type of test double that is meant to return canned (hardcoded before) responses. Then, we write assertions about state or value returned from an <em>object under test</em>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from unittest import main, TestCase
+from unittest.mock import Mock
+
+
+def can_cancel_order(order_id, shipping_system):
+    status = shipping_system.get_status(order_id)
+    if status in ('SENT', 'DELIVERED'):
+        return False
+    return True
+
+
+class CanCancelOrderTest(TestCase):
+    def test_can_cancel_order_with_status_sent_false(self):
+        order_id = 1
+        shipping_system_mock = Mock(get_status=Mock(return_value='SENT'))
+
+        result = can_cancel_order(1, shipping_system_mock)
+
+        self.assertFalse(result)
+
+
+if __name__ == '__main__': main()</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>As you can see, we make no assertions about stubbed dependency. Whether we should use mocks or stubs is a whole different story and is beyond the scope of this article.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Note that I used literal 1 for order_id - this could also be classified as test double, but this time called dummy - a value just passed to exercise an <em>object under test</em> but without real influence on the outcome.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><strong>The most important takeaway from this part is that mock is used to mimic other objects and we make assertions about how it was used.</strong></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Mock - simple examples</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>To create a mock one needs to instantiate unittest.mock.Mock class. By default, Mock will automagically create missing attributes on-the-fly that will be Mocks. If we call such an attribute, we're also gonna get Mock.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from unittest.mock import Mock
+
+
+m = Mock()
+# Mocks by default create new attributes out of a thin air
+m.not_existing_attribute  # <mock name="mock.not_existing_attribute" id="140507980563984">
+
+# Calling Mocks returns by default another Mock instance
+m.not_existing_attribute()  # <mock name="mock.not_existing_attribute()" id="140507980625760">
+
+# once created, autocreated attribute is kept and we keep on getting it
+m.not_existing_attribute()  # <mock name="mock.not_existing_attribute()" id="140507980625760" /></mock></mock></code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>No matter how cool and magic it looks like, it is rather undesired behaviour in tests. Remember that Mocks are to replace real objects. In order to bring any value, they have to behave like them. Reliance on attribute auto-creation is a misuse of mocks and leads to false-positive tests.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>The same goes for returned value - we should not let Mocks leak into further calls. To control it, we use <em>return_value</em> keyword argument:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># We can configure sub-mocks using assignment 
+m.totally_legit_method = Mock(return_value='BAZINGA')
+m.totally_legit_method()  # 'BAZINGA'
+
+# or do it at creation time
+m = Mock(totally_legit_method=Mock(return_value='BAZINGA'))</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>assert_* methods of Mock (+ unsafe parameter)</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Mock instances have a bunch of helpful methods that can be used to write assertions. For example, we can easily assert if mock was called at all: <code>mock.assert_called()</code> or if that happened with specific arguments: <code>assert_called_once_with(argument='bazinga')</code> </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Before Python 3.5 that feature in combination with dynamic attributes creation could be very dangerous. If we made a typo in assert_* method name, mock would just happily create a Mock instance on the fly. As a result, we won't even have an assertion (another false-positive test, yay): </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>m = Mock()
+...
+m.assert_called_once_wit(argument='bazinga')  # xD <mock name="mock.assert_called_once_wit()" id="140258735666560">
+</mock></code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Such a mistake was difficult to spot, but luckily Python3.5 introduced a new keyword to Mock - <em>unsafe</em> with False as default. This makes Mock raise an AttributeError if we try to call a not-existing method starting with "assert" or "assret":</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>m.assert_called_once_wit(argument='bazinga')
+
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/Library/Frameworks/Python.framework/Versions/3.8/lib/python3.8/unittest/mock.py", line 640, in __getattr__
+    raise AttributeError("Attributes cannot start with 'assert' "
+AttributeError: Attributes cannot start with 'assert' or 'assret'</module></stdin></code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Even though this can be seen as a backwards-incompatible change in Python, it definitely was a good one.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Can I make assertions if a real object was called (not a mock)? - <em>wraps</em></h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>If for whatever reason you decide to not replace your real object in the test but still want to make assertions if it was used, you can leverage <em>wraps</em> parameter:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from unittest import main, TestCase
+from unittest.mock import Mock
+
+
+class FooBar:
+    def foo(self, argument: int) -> int:
+        return argument ** 2
+
+
+def function(foobar: FooBar, number: int) -> int:
+    return foobar.foo(number * 2)
+
+
+class FunctionTests(TestCase):
+    def test_function_for_10_calls_foobar_with_20(self):
+        # use a real instance, just wrap it
+        wrapping_mock = Mock(wraps=FooBar())
+
+        result = function(wrapping_mock, 10)
+
+        wrapping_mock.foo.assert_called_once_with(20)
+
+
+if __name__ == '__main__': main()</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Raising exception from Mock (side_effect)</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>To make our Mock raise an exception upon call, we use keyword argument <em>side_effect</em>:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>m = Mock(side_effect=Exception)
+m()
+
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/Library/Frameworks/Python.framework/Versions/3.8/lib/python3.8/unittest/mock.py", line 1075, in __call__
+    return self._mock_call(*args, **kwargs)
+  File "/Library/Frameworks/Python.framework/Versions/3.8/lib/python3.8/unittest/mock.py", line 1079, in _mock_call
+    return self._execute_mock_call(*args, **kwargs)
+  File "/Library/Frameworks/Python.framework/Versions/3.8/lib/python3.8/unittest/mock.py", line 1134, in _execute_mock_call
+    raise effect
+Exception
+</module></stdin></code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>The rule is simple - if a value passed as <em>side_effect</em> is an Exception class or instance, it will get raised. However, it turns out <em>side_effect</em> has more interesting applications...</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Returning a few different values from Mock, raising different exceptions </h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>It may happen we will be calling the same Mock several times and we need it to return different values for each call or raise an Exception but only on third call. To achieve this, we pass a list (or another sequence) as <em>side_effect</em>:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>m = Mock(side_effect=[1, 2, 3])
+m()  # 1
+m()  # 2
+m()  # 3
+m()  # raises StopIteration exception
+
+m = Mock(side_effect=[1, IndexError, 3])
+m()  # 1
+m()  # raises IndexError
+m()  # 3</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>It is not all yet - <em>side_effect</em> can also accept a callable. It will be called and its result (or exception) visible as if it is coming from a mock:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>def callable(arg):
+    if arg == 2:
+        raise Exception
+    return True
+
+
+m = Mock(side_effect=callable)
+m(2)  # raises Exception
+m(1)  # returns 1</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>If we combine this capability with classes defining <em>__call__</em> method, we can mimic any behaviour we want with <em>side_effect</em>:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from unittest.mock import Mock
+
+
+class ReturnValeusAllAround:
+    def __init__(self, values):
+       self._index = 0
+       self._values = values
+
+    def __call__(self):
+        return_value = self._values[self._index]
+        self._index = (self._index + 1) % len(self._values)
+        return return_value
+
+
+m = Mock(side_effect=ReturnValeusAllAround([1, 2, 3]))
+m()  # 1
+m()  # 2
+m()  # 3
+m()  # 1
+m()  # 2
+m()  # ...</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>If a mock accepts arguments, we need to introduce arguments to <em>__call__</em>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>How to safely mock a class? How to safely mock a function?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>It is not hard to create a Mock that can be used in a test, but making it safe and reliable is a very different story. <strong>If you think seriously about using mocks, you have to get to know <em>spec</em> and <em>spec_set</em> keyword arguments.</strong> They both change the undesired default behaviour of Mock class (creating attributes on-the-fly). Both <em>spec</em> and <em>spec_set</em> accept a class/function you want to mimic. <em>spec</em> will raise AttributeError if you try to access an attribute that is not defined on the class while still letting you set non-existent attributes manually. <em>spec_set</em> forbids that and raises AttributeError.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class A:
+    def foo(self):
+        pass
+
+
+spec_mock = Mock(spec=A)
+spec_mock.foo()  # returns another Mock instance
+spec_mock.bar()  # raises AttributeError
+spec_mock.bar = Mock()  # allowed with spec
+
+spec_set_mock = Mock(spec_set=A)
+spec_set_mock.foo()  # returns another Mock instance
+spec_set_mock.bar = Mock()  # raises AttributeError</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><strong><em>spec_set</em> should be your default choice.</strong></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>How to get even safer mocks with sealing?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now, even though <em>spec_set</em> seems to be good enough safety measure, it is not always sufficient. Assume there is a class with two or more similar methods and we mock only one of them for the test:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from unittest import main
+from unittest.mock import Mock
+
+
+class FooBar:
+    def foo(self):
+        pass
+
+    def bar(self):
+        pass
+
+
+foo_bar_mock = Mock(spec_set=FooBar, foo=Mock(return_value='XD'))</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now, if we mock one method (<em>foo</em> in the above example), but an <em>object under test</em> uses unmocked method <em>bar</em>, it will still return a Mock instance. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>foo_bar_mock.bar()  # xD^2 <mock name="mock.bar()" id="140259540846288" /></code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>If we are lucky, our test will fail and we will quickly mock the right method. If it is not our lucky day, we are gonna get false-positive (a passing test for the wrong implementation). I fell into such a situation a few years back. In the end, we created a factory method around Mock called "safe_mock" that will raise an exception if you tried to use an unmocked method. There is no need to do that manually today because Python3.7 has remedy included - <a href="https://docs.python.org/3/library/unittest.mock.html#sealing-mocks">sealing mocks</a>:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from unittest import main
+from unittest.mock import Mock, seal
+
+
+class FooBar:
+    def foo(self):
+        pass
+
+    def bar(self):
+        pass
+
+
+foo_bar_mock = Mock(spec_set=FooBar, foo=Mock(return_value='XD'))
+seal(foo_bar_mock)
+foo_bar_mock.bar
+Traceback (most recent call last):
+  File "<stdin>", line 1, in <module>
+  File "/Library/Frameworks/Python.framework/Versions/3.8/lib/python3.8/unittest/mock.py", line 653, in __getattr__
+    result = self._get_child_mock(
+  File "/Library/Frameworks/Python.framework/Versions/3.8/lib/python3.8/unittest/mock.py", line 1017, in _get_child_mock
+    raise AttributeError(mock_name)
+AttributeError: mock.bar</module></stdin></code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><strong>You should also always seal all your mocks for extra security.</strong></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Mocking versus patching</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>We know how to make mocks useful and it all looks fine, but all previous examples showed code where we could easily pass a Mock instance to an <em>object under test</em>. In reality, we (too) often deal with code that looks like this:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># foobar.py
+...
+foobar = FooBar()
+
+# elsewhere.py
+from foobar import foobar_instance
+
+def tested_function(arg: int) -> None:
+    foobar_instance.foo(...)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><em>foobar</em> instance is an implicit dependency of <em>tested_function</em>. We still may need to replace it in the test, but now there is no simple way to do so. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Luckily, Python has our back and it comes with <em>unittest.mock.patch</em>. I could show examples of how to do patching but despite years of Python experience I still sometimes get them wrong :(. A colleague of mine showed me an alternative - <em>patch.object</em> - that is much easier to get right:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># foobar.py
+from unittest import TestCase
+from unittest.mock import Mock, seal, patch
+
+
+class FooBar:
+    def foo(self, arg):
+        pass
+
+
+foobar_instance = FooBar()
+
+# elsewhere.py
+from foobar import foobar_instance
+
+
+def tested_function(arg: int) -> None:
+    foobar_instance.foo(arg)
+
+# test_elsewhere.py
+from unittest import TestCase
+from unittest.mock import Mock, patch
+
+import elsewhere
+from elsewhere import tested_function
+
+
+class FunctionTests(TestCase):
+    @patch.object(elsewhere, 'foobar_instance', Mock(foo=Mock(return_value=123)))
+    def test_tested_function(self):
+        tested_function(1)
+
+        elsewhere.foobar_instance.foo.assert_called_once_with(1)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>A recipe is simple - we pass a module where our <em>object under test</em> comes from as the first argument of <em>patch.object</em> and name (string!) of an object being mocked as a second argument. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><em>patch</em> as well as <em>patch.object</em> both can be used as decorators or context managers:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>def test_tested_function_with_context_manager(self):
+    with patch.object(elsewhere, 'foobar_instance', Mock(foo=Mock(return_value=123))) as foobar_mock:
+        tested_function(2)
+
+    foobar_mock.foo.assert_called_once_with(2)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p><strong>However, consider patching as your last resort for code you do not control. It should be done sparingly.</strong> The real problem is that <em>tested_function</em> is untestable. To make it easier you should rather consider refactoring your code to use explicit composition and dependency injection via <em>__init__</em> arguments:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>from foobar import FooBar
+
+# it is much easier to pass mock there
+def tested_function(foobar: FooBar, arg: int) -> None:
+    foobar.foo(..)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>How do I mock or patch requests? How to mock time/datetime? How to mock another popular library?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>If you're struggling to patch a third party library you have no control over, chances are someone has already done it and created a library to help you with that.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>For an excellent library for making HTTP calls - <a href="https://requests.readthedocs.io/en/master/">requests</a> - a test utility called <a href="https://github.com/getsentry/responses">responses</a> (I admire that name) has been created. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Mocking time/datetime, doing some time-travel, eh? Look no more, use <a href="https://github.com/spulec/freezegun">freezegun</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Async Mocks - an honourable mention</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>If we write asynchronous code, we may need at some point a possibility to conveniently mock coroutines. Since Python3.8, there is <a href="https://docs.python.org/3/library/unittest.mock.html#unittest.mock.AsyncMock">AsyncMock</a> class in standard library. If you're stuck with older python, you can use one of several available libraries.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Knowing how to write mocks is one thing, but testing effectively is a completely different story. It is beyond the scope of this article, but you will see articles on that matter on that blog as well. :) However, being proficient with Mocks is already a huge step forward. Do not try to patch/hack your code to be able to test - rather make it easily testable.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Always remember about using spec_set and sealing your mocks!</p>
+<p><!-- /wp:paragraph --></p>

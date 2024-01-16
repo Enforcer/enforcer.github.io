@@ -1,0 +1,154 @@
+---
+layout: post
+title: Python Object-Oriented Programming fundamentals and  the most common mistake
+date: 2021-04-25 12:50:22.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- python
+tags: []
+permalink: "/python-object-oriented-programming-fundamentals-and-the-most-common-mistake/"
+---
+<p><!-- wp:heading --></p>
+<h2>The problem</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>One antipattern I see over and over again in OOP Python code (e.g. with <a href="https://breadcrumbscollector.tech/how-to-implement-a-service-layer-in-django-rest-framework/">service layers in Django</a>) is mutating attributes from the outside of a given object:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:enlighter/codeblock {"language":"python"} --></p>
+<pre class="EnlighterJSRAW" data-enlighter-language="python" data-enlighter-theme="" data-enlighter-highlight="" data-enlighter-linenumbers="" data-enlighter-lineoffset="" data-enlighter-title="" data-enlighter-group=""># more like pseudocode 
+def place_bid(
+    auction_id: AuctionId, amount: Money, bidder_id: BidderId
+) -> bool:
+    auction = AuctionRepo.get(auction_id)
+
+    if amount &lt;= auction.current_price:
+        raise BidTooLow
+    new_bid = Bid(amount, bidder_id)
+    auction.bids.append(new_bid)  # ouch!
+    auction.bids.sort(lambda key: -amount)  # ouch x2
+    auction.current_price = auction.bids[0].amount  # ouch x3
+
+    AuctionRepo.save(auction)
+
+    is_winner = auction.bids[0].bidder_id == bidder_id
+    return is_winnger</pre>
+<p><!-- /wp:enlighter/codeblock --></p>
+<p><!-- wp:paragraph --></p>
+<p>What's wrong with that? Surprisingly many things. First of all, it's pretty complex logic that touches the guts of an <code>Auction</code>. It does not only mutate the state of an auction but also enforces certain invariants. The latter are conditions that always have to be met and they root in business rules. For example, the current price is equal to the amount of the top bid. <code>Auction</code> is much better for having this logic than some view or service function.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>If it's not apparent, imagine we have to implement withdrawing a specific bid. Once again, the state of an Auction would be mutated and the current price has to be recalculated. Plus there is one edge case - if the last bid is withdrawn, <code>current_price</code> should be reset to auction's open price.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:enlighter/codeblock {"language":"python"} --></p>
+<pre class="EnlighterJSRAW" data-enlighter-language="python" data-enlighter-theme="" data-enlighter-highlight="" data-enlighter-linenumbers="" data-enlighter-lineoffset="" data-enlighter-title="" data-enlighter-group=""># pseudocode again
+def withdraw_bid(amount: Money, bidder_id: BidderId) -> None:
+    auction = AuctionRepo.get(auction_id)
+
+    bid_to_withdraw = Bid(amount, bidder_id)
+    auction.bids = [  # OMG
+        bid for bid in auction.bids if bid != bid_to_withdraw
+    ]
+    try:
+        auction.current_price = auction.bids[0].amount
+    except IndexError:
+        auction.current_price = auction.open_price
+
+    AuctionRepo.save(auction)</pre>
+<p><!-- /wp:enlighter/codeblock --></p>
+<p><!-- wp:paragraph --></p>
+<p>Don't tell me you like this procedural code.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Meet Tell, don't Ask</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now, a quick reminder what Object-Oriented Programming is:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"align":"center","id":911,"width":381,"height":383,"sizeSlug":"large","linkDestination":"none"} --></p>
+<div class="wp-block-image">
+<figure class="aligncenter size-large is-resized"><img src="{{ site.baseurl }}/assets/2021/04/obraz-1019x1024.png" alt="" class="wp-image-911" width="381" height="383" /></figure>
+</div>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>In short, we bring together data and behaviour during design - usually in a form of classes. However, using classes doesn't make a code OOP! Also, the opposite is true - OOP doesn't necessarily use classes. Especially in Python, where everything is an object and sometimes a module (an object!) with methods inside would also do.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>There is Tell, Don't Ask principle that states</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:quote --></p>
+<blockquote class="wp-block-quote"><p>Tell-Don't-Ask is a principle that helps people remember that object-orientation is about bundling data with the functions that operate on that data. It reminds us that rather than asking an object for data and acting on that data, we should instead tell an object what to do. This encourages to move behavior into an object to go with the data.</p>
+<p><cite>https://martinfowler.com/bliki/TellDontAsk.html</cite></p></blockquote>
+<p><!-- /wp:quote --></p>
+<p><!-- wp:paragraph --></p>
+<p>The design encouraged by Tell, Don't Ask would indeed burded <code>Auction</code> with all that logic, so our views/services would be simpler:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:enlighter/codeblock --></p>
+<pre class="EnlighterJSRAW" data-enlighter-language="generic" data-enlighter-theme="" data-enlighter-highlight="" data-enlighter-linenumbers="" data-enlighter-lineoffset="" data-enlighter-title="" data-enlighter-group=""># pseudocode x 3
+def place_bid(
+    auction_id: AuctionId, amount: Money, bidder_id: BidderId
+) -> bool:
+    auction = AuctionRepo.get(auction_id)
+
+    auction.place_bid(amount, bidder_id)
+
+    AuctionRepo.save(auction)
+
+    return auction.is_winner(bidder_id)
+
+
+def withdraw_bid(amount: Money, bidder_id: BidderId) -> None:
+    auction = AuctionRepo.get(auction_id)
+
+    auction.withdraw_bid(amount, bidder_id)
+
+    AuctionRepo.save(auction)</pre>
+<p><!-- /wp:enlighter/codeblock --></p>
+<p><!-- wp:paragraph --></p>
+<p>All of the operations appending bids or doing whatever to fields of the auction will now be methods on <code>Auction</code> class. <code>place_bid</code> and <code>withdraw_bid</code> now only <em>tells</em> <code>Auction</code> what to do, it doesn't <em>ask</em> for its data to directly change it.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Notice that now code of <code>place/withdraw_bid</code> adheres to favoured Python's coding style -</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:quote --></p>
+<blockquote class="wp-block-quote"><p><em>Easier to ask for forgiveness than permission</em></p>
+</blockquote>
+<p><!-- /wp:quote --></p>
+<p><!-- wp:paragraph --></p>
+<p>You don't have to do extra checks from the outside - <code>Auction</code> wil tell you if operation cannot be performed, either by return value or by raising a domain-specific (e.g. <code>NoSuchBidToWithdraw</code> or <code>BidTooLow</code>) exception :) </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Is it always bad to ask?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>No, if you are writing a script and objects you're mutating are not domain models but rather data structures. In simple data processing where dictionaries or data classes fly around adding methods to them would be overkill. Often, there are no invariants we could or should protect. In such cases, we should be totally fine by not using OOP.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:separator --></p>
+<hr class="wp-block-separator" />
+<!-- /wp:separator --></p>
+<p><!-- wp:block {"ref":988} /--></p>
+<p><!-- wp:separator --></p>
+<hr class="wp-block-separator" />
+<!-- /wp:separator --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Object-Oriented Programming excels when we model complex domains with invariants to protect and many nuances. Tell, Don't Ask principle encourages Object-Oriented thinking and design. It helps eliminate dangerous code &amp; logic duplication before it occurs. It also plays really nicely with the idea of <a href="https://breadcrumbscollector.tech/encapsulation-is-your-friend-also-in-python/">encapsulation</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Don't make your objects dumb bags of data when they represent a domain concept :)  </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Further reading</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li><a href="https://www.martinfowler.com/bliki/TellDontAsk.html">https://www.martinfowler.com/bliki/TellDontAsk.html</a></li>
+<li><a href="https://docs.python.org/3/glossary.html#term-eafp">https://docs.python.org/3/glossary.html#term-eafp</a></li>
+<li><a href="https://docs.python.org/3/glossary.html#term-lbyl">https://docs.python.org/3/glossary.html#term-lbyl</a></li>
+</ul>
+<p><!-- /wp:list --></p>

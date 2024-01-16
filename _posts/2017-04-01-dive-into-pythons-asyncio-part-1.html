@@ -1,0 +1,58 @@
+---
+layout: post
+title: Dive into Python's asyncio, part 1
+date: 2017-04-01 11:05:00.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- asyncio
+- dajsiepoznac2017
+- python
+tags: []
+permalink: "/dive-into-pythons-asyncio-part-1/"
+---
+<p>Concurrency was not seriously taken into account in Python when it was designed. Until 3.4 version, there were two options:</p>
+<ul>
+<li><a href="https://docs.python.org/3/library/threading.html">threading</a></li>
+<li><a href="https://docs.python.org/3/library/multiprocessing.html">multiprocessing</a></li>
+</ul>
+<p>Although these two modules provided programmers with handy primitives and API, they both have considerable downsides. Due to <a href="https://wiki.python.org/moin/GlobalInterpreterLock">GIL presence</a>, threaded code in Python never actually run in parallel. So all attempts to leverage multiple cores were bound to fail.</p>
+<p>On the other hand, programs using multiprocessing could easily use all the CPU power available. Nevertheless, concurrency with seperate processes is heavy solution, more memory-consuming and limited if we talk about possible independent execution units operating in parallel. Need for synchronization means also additional burden for OS, because processes share no memory and one must use OS-provided mechanisms for sending messages between processes.</p>
+<p>Let's not write them off, though. These modules still may become very useful in particular situations.</p>
+<p>Writing software for contemporary web requires higher level of concurrency that Python is able to provide. Or at least it was until version 3.4, when shiny, new toy was introduced - <a href="https://docs.python.org/3/library/asyncio.html"><em>asyncio</em></a> module. Two minor versions later, when 3.6 came out we were finally assured about asyncio API's stability.</p>
+<blockquote><p>Starting with Python 3.6 the <code class="docutils literal"><span class="pre">asyncio</span></code> module is no longer provisional and its API is considered stable.</p></blockquote>
+<p>Asyncio enables to write highly concurrent code, that can cheaply switch context when waiting for I/O operation. This is possible due to simple observation, that subprogram does not need CPU while it waits for some data to come over the network. In other words, asyncio provides better utilization of CPU in I/O bound applications. It also means that there is no sense in using asyncio for CPU heavy calculations.</p>
+<p>Python 3.5 simplified and beautified syntax by introduction new keywords like <strong>async</strong> and <strong>await</strong>. I believe these two are <em>borrowed</em> from C#.</p>
+<p>One of the simplest example I can think of is to make several HTTP requests in parallel:</p>
+<pre class="lang:python decode:true">import asyncio
+import aiohttp
+
+
+async def example():
+    async with aiohttp.ClientSession() as session:
+        results = await asyncio.gather(   # 3
+            get('http://httpbin.org/user-agent', session),
+            get('http://httpbin.org/headers', session),
+            get('http://httpbin.org/cookies', session)
+        )
+        print(results)
+
+
+async def get(url, session):
+    async with session.get(url) as resp:
+        return await resp.text()
+
+
+loop = asyncio.get_event_loop()  # 1
+loop.run_until_complete(example())   # 2</pre>
+<ol>
+<li>asyncio is based on so-called event loop. More details below</li>
+<li>Our program runs as along as event loop is running. We want it to terminate after getting all responses</li>
+<li>asyncio.gather takes multiple coroutines or futures and can be awaited until all its arguments finishes.</li>
+</ol>
+<p>The event loop is a heart of asyncio. This is where switching context takes place. It is responsible for reacting to finishing I/O operations. There is no difference in asyncio's event loop and concepts staying behind node.js and its uvloop. However, you are unlikely to fall into callback hell when writing asyncio code, because it simply looks like synchronous one. There is no need for passing callbacks.</p>
+<p>This is the first post of asyncio series. Another one will be about asyncio's cooperative libraries and designing asyncio apps.</p>
+<p>&nbsp;</p>

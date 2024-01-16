@@ -1,0 +1,161 @@
+---
+layout: post
+title: 'Code review: how experienced developers do it?'
+date: 2020-03-14 20:16:54.000000000 +01:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- software engineering
+- testing software
+tags: []
+permalink: "/code-review-how-experienced-developers-do-it/"
+---
+<p><!-- wp:paragraph --></p>
+<p>High-quality code review is one of the secrets of the most effective teams. Over the years I noticed a few interesting ways to approach it. Now I share them with you in this article.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"align":"center","id":455,"sizeSlug":"large"} --></p>
+<div class="wp-block-image">
+<figure class="aligncenter size-large"><img src="{{ site.baseurl }}/assets/2020/03/audit-3737447_1280.jpg?fit=676%2C498&amp;ssl=1" alt="" class="wp-image-455" /></figure>
+</div>
+<p><!-- /wp:image --></p>
+<p><!-- wp:heading --></p>
+<h2>Recipe 1: Suggesting refactoring in the right moment</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Seemingly nothing spectacular, though I do not mean excessive code polishing just to make it look as the reviewer likes it. It is rather about noticing that code change was hard to introduce and incurred extra technical debt.  A professional sees that if the developer first refactored the code, then actual change would be much simpler. Plus, no technical debt run-up. Woohoo! </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Example 1: A developer writes a very similar code to one that already exists (or copy-pastes because why not #YOLO). A reviewer suggests deduplicating it by moving it elsewhere so it can be used in both places. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Example 2: A developer needs to handle another case, so they change a function to accept 3 arguments instead of 2. The last is a boolean flag which cuts the function in half with an <em>if</em>-statement. A reviewer notices that if the developer would create a new class for new business logic, the function would remain simple and the burden of decision-making could be moved to the new class.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Recipe 2: Suggesting more efficient ways of solving a problem</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>This can manifest itself twofold - either by proposing a more concise solution (fewer lines of code, thanks to e.g. more idiomatic solution) or one that will work faster. First, let's say BIG NO to optimization maniacs that would rewrite the project in assembly if they were let to. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Example 1: A developer implemented a solution using a <em>for</em>-loop with nested <em>if</em>-statement. A reviewer suggests rewriting code using list-comprehension with filter (if).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># First approach
+available_employees = []
+
+for employee in employees:
+    if employee.is_working():
+        available_employees.append(employee)
+
+return available_employees
+
+# Second approach, after code review
+return [employee for employee in employees if employee.is_working()]</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Example 2: A developer uses a constant list of values to check if a variable is in it. Reviewer #1 suggests using <em>tuple</em> to make search more optimized. However, guessing is not an engineering practice and should not be combined with performance. Reviewer #2 benchmarks list, tuple and set to prove that the latter is the right choice:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># original code
+ALLOWED_STATUSES = [
+    'NEW',
+    'WAITING_FOR_RESPONSE',
+    'OVERDUE',
+    'REOPENED',
+    'ESCALATED',
+]
+
+def can_be_opened(ticket):
+    return ticket.status in ALLOWED_STATUSES
+
+# benchmark using timeit module
+## list
+python3 -m timeit -s 'ALLOWED_STATUSES = ["NEW", "WAITING_FOR_RESPONSE", "OVERDUE", "REOPENED", "ESCALATED"]' '"NON_EXISTING" in ALLOWED_STATUSES'
+> 5000000 loops, best of 5: 61.5 nsec per loop
+
+## tuple
+python3 -m timeit -s 'ALLOWED_STATUSES = ("NEW", "WAITING_FOR_RESPONSE", "OVERDUE", "REOPENED", "ESCALATED")' '"NON_EXISTING" in ALLOWED_STATUSES'
+> 5000000 loops, best of 5: 56.1 nsec per loop # Negligible improvement
+
+## set
+python3 -m timeit -s 'ALLOWED_STATUSES = {"NEW", "WAITING_FOR_RESPONSE", "OVERDUE", "REOPENED", "ESCALATED"}' '"NON_EXISTING" in ALLOWED_STATUSES'
+> 20000000 loops, best of 5: 15.6 nsec per loop  # 4 times faster!</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>In the end, the developer may not even use set because, for God's sake, that's searching a 5 items-long list in a non-critical place!</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Recipe 3: Cloning code locally to review it</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>A little thing, but enables to see code changes in a broader context. While Github/Bitbucket/Gitlab etc. provides a convenient way to review code with highlighting changed lines, such way of browsing may also prove itself useful in certain situations.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Recipe 4: Paying attention to acceptance criteria</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>No, I don't mean glancing over code to see if it does what the ticket says in the title (too obvious!). I mean literally reading the ticket first, then taking one acceptance criterion at a time to see if it is fulfilled.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>My mind was blown when I saw it the first time. Thanks to my ex-colleague, Domi! :D</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Example:  A developer writes code for calculating shipping price. A reviewer reads the ticket and at acceptance criterion #4 sees there is a rule for free shipping if the total is more than $200. Then, they request changes to be made :).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><strong>Seriously, this should be a starting point for many if not all code reviews. Too often I saw developers focusing only on technical aspects without paying attention to the reason why the code was written in the first place.</strong></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Recipe 5: Reading tests first</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Ahh, test-first approach at its best - also for code reading, not only writing!</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>This is another take on recipe 4 - paying attention to acceptance criteria. Not only a reviewer sees if tests are present (their absence can be a first reason to block PR...) but also if they describe all acceptance criteria specified in the ticket.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Recipe 6: Paying attention to names</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Naming things is hard and often subjective. However, senior developers should simply have more experience with it (or they managed to read entire Wikipedia to know a lot of words with meanings). As a result, they can often name things more concisely and precisely. Experienced people (AKA those who have been working with the project for a while) will also guard naming - prevent synonyms from happening to make sure it is easy to understand code. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Example: A developer uses its own discovered synonym for the name of the variable. The synonym is long, has French roots and is sooo <em>sophistiqué</em>. A reviewer knows that in the project there is already a convention of naming that <em>thing</em> and politely asks to use a name common in the project.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Also, check out <a href="https://martinfowler.com/bliki/UbiquitousLanguage.html">Ubiquitous Language</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Bonus! A dark side of code reviews:</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>anti-recipe 1: Not being able to review logic if they don't like your indentation or formatting</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Yes, it is important to maintain a uniform way of code formatting. But making comments only about the way how a developer placed braces is unproductive. What I also observed is that it is unlikely that someone will focus as much on logic if they see flaws in indentation (seriously...).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>To avoid a lot of such discussions, quickly implement a code formatter (e.g. <a href="https://github.com/psf/black">black</a> for Python) + linters. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>anti-recipe 2: Using code review to impose own style of coding and problem-solving </h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>For the last, disheartening issue with code reviews, namely using it to make sure everyone writes code in the way a reviewer likes. Usually, it would be the most senior developer on the team. Such behaviour is toxic and often roots in overgrown ego. To make matter worse, such people often become bottlenecks since everything has to be blessed by them. Truth to be told, if the people have some fundamental knowledge and work on the project for some time, code they deliver will be <em>good enough</em> for most of the time. There is no need to make them rearrange every line. :) </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>The real role of the code review</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>You may think that the goal of the code review is to teach others. Well, not precisely. That's merely a side effect, though much appreciated by everyone!</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Code reviews are to prevent bugs, by catching them as early as possible. It is way cheaper (and faster!) then waiting for a QA engineer to return it to you. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>What are your secrets for doing effective code review? :) Share in comments!</p>
+<p><!-- /wp:paragraph --></p>

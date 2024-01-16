@@ -1,0 +1,178 @@
+---
+layout: post
+title: When to use the Clean Architecture?
+date: 2020-04-03 09:00:00.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- clean architecture
+- python
+tags: []
+permalink: "/when-to-use-the-clean-architecture/"
+---
+<p><!-- wp:heading --></p>
+<h2>Enthusiasm, doubt, opposition</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>There are few possible reactions after learning about <a href="https://breadcrumbscollector.tech/the-clean-architecture-in-python-how-to-write-testable-and-flexible-code/">the Clean Architecture</a> or Hexagonal Architecture (AKA Ports &amp; Adapters) or even merely innocent service layer in Django. Some developers are enthusiastic and try to apply these techniques immediately, some are hesitant, full of doubts. The rest is strongly opposing, declaring openly this is an abomination. Then they say we already have excellent tools, like Django. Then they argue others don't know about the advanced features of common tools. Then they call you Java developer in disguise.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>As a speaker and an author of the book <a href="https://leanpub.com/implementing-the-clean-architecture">Implementing the Clean Architecture</a> , I have faced all the reactions from this spectrum. What two extremes fail to do, is to ask the right question - WHEN? <strong>When the Clean Architecture should be used?</strong></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Frankly, the Clean Architecture (or other technique) is not what most overenthusiastic adopters think it is. On the other hand, headstrong opponents see this as a bluff and try to call it. There is no bluff. It is not meant to be a silver bullet.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p><em>By the way, if you are an evangelist of one of these techniques and do not mention they are not one-size-fits-all solutions, start immediately. Please.</em></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:html --></p>
+<blockquote class="twitter-tweet"><p lang="en" dir="ltr">A good developer is like a werewolf: Afraid of silver bullets.</p>
+<p>— ?Jochen Mader ?? (@codepitbull) <a href="https://twitter.com/codepitbull/status/784691906005635072?ref_src=twsrc%5Etfw">October 8, 2016</a></p></blockquote>
+<p> <script async="" src="https://platform.twitter.com/widgets.js" charset="utf-8"></script><br />
+<!-- /wp:html --></p>
+<p><!-- wp:heading --></p>
+<h2>No silver bullet</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:image {"id":580,"sizeSlug":"large"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2020/04/tools-2536159_1280.jpg?fit=676%2C507&amp;ssl=1" alt="" class="wp-image-580" /></figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>So the Clean Architecture is like a hammer - applicable for a specific set of problems. And no, it does not deprecate our current toolset, in particular Django. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Speaking of silver bullets... during my talks about the Clean Architecture, I quote <em>No Silver Bullet - Essence and Accident in Software Engineering</em> - a paper written by Frederick Brooks. You can easily find it online. The clue is that there is no magic trick, single technique or approach (title silver bullet) that will make the efficiency of software development to improve dramatically.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>The other worthy takeaway from the paper is a division of complexity into two categories - accidental and essential. Accidental complexity is something we can eradicate with a finite effort, e.g. refactor code, use 3rd party library (so we don't have to implement the solution entirely on our own). So it can be dealt with. Essential complexity is a completely different creature. It can not be avoided UNLESS we negotiate a change in business requirements.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"id":588,"sizeSlug":"large"} --></p>
+<figure class="wp-block-image size-large"><img src="{{ site.baseurl }}/assets/2020/04/beach-863139_1280.jpg?fit=676%2C450&amp;ssl=1" alt="" class="wp-image-588" /><br />
+<figcaption>Essential complexity will catch you</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:paragraph --></p>
+<p>In other words, if business requirements are complex, so will be the code - no matter how many programming aces one has up their sleeve. If a program has 50 features, it will be inherently complex. This gives us the first reason to interest in the Clean Architecture which is...</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Managing essential complexity</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Assuming one failed to reduce the scope of business requirements, essential complexity is inevitable. Since we cannot avoid it, we have to learn how to manage it. One is no longer able to model a solution with a database browser-like application. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>On the other hand, if one does not have to manage essential complexity, the Clean Architecture is simply unnecessary. And it makes things worse because that's an extra burden. This is introducing accidental complexity.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>How to tell if one is dealing with essential complexity? Talk with the right people, the ones who call the shots. The ones who drive business requirements. Remember, they learn along the way the same way you do. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>What you are looking for is called <em>Core Domain</em> (<a href="https://dddcommunity.org/learning-ddd/what_is_ddd/">Domain-Driven Design</a> terminology). Core Domain is a set of business rules that are the main reason for the project to be built. Take cloud services that provide authorization &amp; identity management, like <a href="https://auth0.com/">Auth0</a>. For our projects, login/logout is rarely something we want to sweat over. It is critical, but they are quality libraries for that and look, cloud services. What one project may treat as Generic Domain (DDD again), for others is a core of their business. Auth0 site even claims that "Identity is Complex". Well, for them it certainly is. And they make it easy for others.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Core Domain is often part of the project that stands for a <a href="https://en.wikipedia.org/wiki/Competitive_advantage">competitive advantage</a>. If it is going to outperform competitors, simple solutions may not suffice. So the only piece of advice I can give is to recognize different aspects or functionalities the project you work on has or is meant to have.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading {"level":3} --></p>
+<h3>Where else to look for essential complexity?</h3>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Core Domain may not be the only place which deserves more sophisticated techniques. There is a relatively easy heuristic to tell:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>if it's not just a proxy over 3rd party, tightly coupled to it</li>
+<li>if it's more than a simple database browser and uses more business validation rules</li>
+<li>if it uses 3rd party, but it can be potentially swapped (like Payment Gateway)</li>
+<li>if it just has a lot of edge cases and business rules to enforce...</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>the chances are you have a perfect match to apply the Clean Architecture or other technique. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>An example: our project had a feature of subscriptions. A member:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:list --></p>
+<ul>
+<li>could subscribe to one of the available plans (9 in total, subject to change in the future),</li>
+<li>could choose one of the billing periods (monthly, yearly),</li>
+<li>was to be charged periodically based on billing period,</li>
+<li>could upgrade and downgrade their plan at any time,</li>
+<li>would receive various benefits, affecting other parts of the application, including Core Domain</li>
+</ul>
+<p><!-- /wp:list --></p>
+<p><!-- wp:paragraph --></p>
+<p>Even though it was not the main feature, still quite complex and crucial - because it was making extra money.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>But you won't catch many of such subtleties unless you listen and talk with stakeholders or their representative, e.g. product owner/project manager. Do it, your effectiveness and possibly a success of the project depends on it. And someone thought that being a programmer means less human interaction. Which smoothly brings us to the second reason for using the Clean Architecture...</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Facilitate communication</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>For simple CRUD-flavoured applications, one can be comfortable with translating business requirements into database tables operations on the go. Once the project grows and more essential complexity appears, it is no longer that easy. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>That's pure biology. Our brains are too small to comprehend too much information at once. Which makes it harder and harder to represent domain knowledge in the code if it gets scattered in all corners of the application. That's why we focus on business rules and provide special places to put the logic.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Communication is crucial for effective work, for example reducing the risk of misunderstanding or increasing chances for discovering edge cases. It will also help you find out if the problem is essentially complex (use the Clean Architcture) or not.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>In the end, we talk and think in a more abstract way. We think and code  Entities or Use Cases. Eventually, data has to be saved in the database and read from it, but it's not our main concern. We realise it's more like a side effect. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:quote --></p>
+<blockquote class="wp-block-quote"><p>Software Development is a learning process, Working code is a side effect.</p>
+<p><cite>Alberto Brandolini</cite></p></blockquote>
+<p><!-- /wp:quote --></p>
+<p><!-- wp:heading --></p>
+<h2>"But this is not Pythonic! You're imitating Java/C# etc in our pure language!"</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>(Yes, I actually heard this twice and a friend of mine at least once).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>It is not a matter of programming language, it is ALWAYS a matter of what problem one tries to solve with it. Then, only after recognizing the problem, one uses appropriate techniques.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>If there was some mastermind, responsible for dispatching projects to companies specialized in particular technologies, perhaps all we would be getting were projects where Django shines. But it doesn't work that way. And that's good, really good. You are challenged, so you have to learn new things and as a result, we all thrive.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Look at the history of node.js. A few years back no one would suppose that this funny and often astonishing (see <a href="https://www.destroyallsoftware.com/talks/wat">WAT talk by Gary Bernhardt</a>) browser language would be a considerable competence for Python on the backend. Yeah, the language lacked a proper ecosystem, it was dynamically and weakly typed. Look what's happening now. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Now, look at Python. It also advanced in the last decade. We have <a href="https://breadcrumbscollector.tech/mypy-how-to-use-it-in-my-project/">type annotations, mypy</a>, dataclasses just to name a few. Finally, dependency management got some traction (pipenv, poetry, PSF financed pip development...). Languages progress is simply a response to the needs of the market. Or rather it is a future created by contributors who see a need for tools that would make their life easier while working on real-world projects. Python is no different than other languages in that matter. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>All this is fine, but the majority of my project does not have that essential complexity</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>The truth is that the Clean Architecture is not applicable throughout the entire project. Luckily, we are not doomed. It does not mean we have to choose between overengineering in most places or underengineering in our Core Domain.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>It is just an indication of another need. Need for modularization. We need a way to use different architectural styles throughout the project. It doesn't really matter if it will be a <a href="https://www.kamilgrzybek.com/design/modular-monolith-primer/">modular monolith</a> or microservices. We just need a little flexibility to choose the most appropriate style for different parts of the project. </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>However, it is unlikely you will ever see a need for modularization (not to mention the Clean Architecture) if you switch companies or projects every few months (say, about 2-3 months, definitely less than 6). You will not have enough exposure to a single business domain to learn intricacies. You will simply have no occasion to learn. While software developers tend to think at some stages of their careers that clean code can save the world, the fact is our code is merely a derivative of communication with stakeholders. Programming skills are a cure only for accidental complexity.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Should I bother even if I don't need the Clean Architecture now?</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Yes, you should. It will still advance you as a programmer. And if you are lucky, you will work on more challenging projects in the future without sweating too much.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Even if it's not helpful for you now and you decide you don't want to commit to it, why not just remember there is such a technique and dive into it when there is a need for that?</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:core-embed/wordpress {"url":"https://breadcrumbscollector.tech/the-clean-architecture-in-python-how-to-write-testable-and-flexible-code/","type":"wp-embed","providerNameSlug":"breadcrumbs-collector","className":""} --></p>
+<figure class="wp-block-embed-wordpress wp-block-embed is-type-wp-embed is-provider-breadcrumbs-collector">
+<div class="wp-block-embed__wrapper">
+https://breadcrumbscollector.tech/the-clean-architecture-in-python-how-to-write-testable-and-flexible-code/
+</div>
+</figure>
+<p><!-- /wp:core-embed/wordpress --></p>
+<p><!-- wp:paragraph --></p>
+<p><!-- /wp:paragraph --></p>

@@ -1,0 +1,394 @@
+---
+layout: post
+title: 'When to use metaclasses in Python: 5 interesting use cases'
+date: 2020-04-10 09:00:00.000000000 +02:00
+type: post
+parent_id: '0'
+published: true
+password: ''
+status: publish
+categories:
+- python
+tags: []
+permalink: "/when-to-use-metaclasses-in-python-5-interesting-use-cases/"
+---
+<p><!-- wp:paragraph --></p>
+<p>Metaclasses are mentioned among the most advances features of Python. Knowing how to write one is perceived like having a Python black belt. But are they useful at all outside job interviews or conference talks? Let's find out! This article will show you 5 practical applications of metaclasses.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:image {"align":"wide","id":609,"sizeSlug":"large"} --></p>
+<figure class="wp-block-image alignwide size-large"><img src="{{ site.baseurl }}/assets/2020/04/excalibur-3445952_1920.jpg?fit=676%2C380&amp;ssl=1" alt="" class="wp-image-609" /><br />
+<figcaption>The legend says there was a Python developer that actually used metaclasses in their code</figcaption>
+</figure>
+<p><!-- /wp:image --></p>
+<p><!-- wp:heading --></p>
+<h2>What metaclasses are - quick recap</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Assuming you know the difference between classes and objects, metaclasses should not be that difficult - they are classes for classes (hence "meta" in their name).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Simply saying - while classes are blueprints for objects, metaclasses are blueprints for classes. Class acts as a blueprint when we create an instance of it whereas metaclass acts as a blueprint only when a class is defined.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>The simplest implementation of a metaclass that does nothing looks as follows:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># inherit from type
+class MyMeta(type):
+    # __new__ is a classmethod, even without @classmethod decorator
+    def __new__(cls, name, bases, namespace):
+        # cls - MyMeta
+        # name - name of the class being defined (MyClass in this example)
+        # bases - base classes for constructed class, empty tuple in this case
+        # namespace - dict with methods and fields defined in class  
+        # in this case - {'x': 3}         
+
+        # super().__new__ just returns a new class
+        return super().__new__(cls, name, bases, namespace)
+
+class MyClass(metaclass=MyMeta):
+    x = 3</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Avoiding decorators repetition or decorating all subclasses</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Let's say you fall in love with relatively recent <a href="https://docs.python.org/3/library/dataclasses.html">dataclasses</a> stdlib module or you use much more advanced <a href="https://www.attrs.org/en/stable/">attrs</a>. Or you just use a lot of repetitive decorators on your classes:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>@attr.s(frozen=True, auto_attribs=True)
+class Event:
+    created_at: datetime
+
+
+@attr.s(frozen=True, auto_attribs=True)
+class InvoiceIssued(Event):
+    invoice_uuid: UUID
+    customer_uuid: UUID
+    total_amount: Decimal
+    total_amount_currency: Currency
+    due_date: datetime
+
+
+@attr.s(frozen=True, auto_attribs=True)
+class InvoiceOverdue(Event):
+    invoice_uuid: UUID
+    customer_uuid: UUID</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Maybe it's not too much repetition, but we can still get rid of it we we wrote a metaclass for Event:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class EventMeta(type):
+    def __new__(cls, name, bases, namespace):
+        new_cls = super().__new__(cls, name, bases, namespace)
+        return attr.s(frozen=True, auto_attribs=True)(new_cls)  # (!)
+
+
+class Event(metaclass=EventMeta):
+    created_at: datetime
+
+
+class InvoiceIssued(Event):
+    invoice_uuid: UUID
+    customer_uuid: UUID
+    total_amount: Decimal
+    total_amount_currency: Currency
+    due_date: datetime
+
+
+class InvoiceOverdue(Event):
+    invoice_uuid: UUID
+    customer_uuid: UUID
+</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>The most important line, `attr.s(frozen=True, auto_attribs=True)(new_cls)` deals with decoration of our subclasses. The key to understanding this example is the fact that syntax with "at sign" (@) is merely a syntax sugar over such construct:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class Event:
+    created_at: datetime
+
+Event = attr.s(frozen=True, auto_attribs=True)(Event)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Validation of subclasses</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Speaking of classes, let's think about inheritance in a context of <a href="https://refactoring.guru/design-patterns/template-method">Template Method design pattern</a>. Simply saying, we define an algorithm in the base class, but we leave one or more steps (or attributes) as abstract methods (or properties), to be overridden in a subclass. Consider this example:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class JsonExporter(abc.ABC):
+    def export(self):
+        # do some stuff
+        with open(self._filename) as f:
+            for row in self._build_row_from_raw_data():
+                pass  # do some other stuff
+
+    @abc.abstractmethod
+    @property
+    def _filename(self):
+        pass
+
+    @abc.abstractmethod
+    def _build_row_from_raw_data(self, raw_data):
+        pass
+    
+
+class InvoicesExporter(JsonExporter):
+    _filename = 'invoices.json'
+
+    def _build_row_from_raw_data(self, raw_data):
+        return {'invoice_uuid': raw_data&#91;0]}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>We have a simple base class for JSON exporters. It is enough to subclass it and provide an implementation for the <em>_filename</em> property and the <em>_build_row_from_raw_data</em> method. However, abc only provides validation for the absence of these parameters. If we, for example, would like to check more things, like the uniqueness of filenames or its correctness (e.g. always ends with .json) we can write a metaclass for that as well:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>import inspect
+
+"""
+We inherit from abc metaclass (ABCMeta) to avoid metaclasses conflicts
+"""
+class JsonExporterMeta(abc.ABCMeta):
+    _filenames = set()
+
+    def __new__(cls, name, bases, namespace):
+        # first execute abc logic
+        new_cls = super().__new__(cls, name, bases, namespace)
+
+        """
+        There is no need to run validations against abstract class
+        """
+        if inspect.isabstract(new_cls):  # 2
+            return new_cls
+
+        """
+        Validate if _filename is a string
+        """
+        if not isinstance(namespace&#91;'_filename'], str):
+            raise TypeError(f'_filename attribute of {name} class has to be string!')
+
+        """
+        Validate if a _filename has a .json extension
+        """
+        if not namespace&#91;'_filename'].endswith('.json'):
+            raise ValueError(f'_filename attribute of {name} class has to end with ".json"!')
+
+        """
+        Validate uniqueness of _filename among other subclasses.
+        This uses a metaclass attribute _filenames - a set of strings         
+        to remember all _filenames of subclasses
+        """
+        if namespace&#91;'_filename'] in cls._filenames:
+            raise ValueError(f'_filename attribute of {name} class is not unique!')
+
+        cls._filenames.add(namespace&#91;'_filename'])
+
+        return new_cls
+
+
+"""
+Now, we will not be inheriting from abc.ABC but we will use our new metaclass instead
+"""
+class JsonExporter(metaclass=JsonExporterMeta):
+    pass  # The rest of the class remains unchanged, so I skipped it
+
+
+class BadExporter(JsonExporter):
+    _filename = 0x1233  # That's going to fail one of the checks
+
+    def _build_row_from_raw_data(self, raw_data):
+        return {'invoice_uuid': raw_data&#91;0]}</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Speaking of ABC, this is another thing that's implemented using metaclasses. See this talk by Leonardo Giordani - <a href="https://www.youtube.com/watch?v=I9nXiJQnGsk">Abstract Base Classes: a smart use of metaclasses</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Registering subclasses - extendable strategy pattern</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Using metaclasses attributes we can also write a clever, Open-Closed implementation of a factory. The idea will be based on keeping a registry of concrete (non-abstract) subclasses and building them using a name:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class StrategyMeta(abc.ABCMeta):
+    """
+    We keep a mapping of externally used names to classes.
+    """
+    registry: Dict&#91;str, 'Strategy'] = {}
+
+    def __new__(cls, name, bases, namespace):
+        new_cls = super().__new__(cls, name, bases, namespace)
+
+        """
+        We register each concrete class
+        """
+        if not inspect.isabstract(new_cls):
+            cls.registry&#91;new_cls.name] = new_cls
+
+        return new_cls 
+
+
+class Strategy(metaclass=StrategyMeta):
+    @property
+    @abc.abstractmethod
+    def name(self):
+        pass
+
+    @abc.abstractmethod
+    def validate_credentials(self, login: str, password: str) -> bool:
+        pass
+
+    @classmethod
+    def for_name(cls, name: str) -> 'Strategy':
+        """
+        We use registry to build a better class
+        """
+        return StrategyMeta.registry&#91;name]()
+
+
+class AlwaysOk(Strategy):
+    name = 'always_ok'
+
+    def validate_credentials(self, login: str, password: str) -> bool:
+        # Imma YESman!
+        return True
+
+# example
+Strategy.for_name('always_ok').validate_credentials('john', 'x')</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Warning: for this to work, we need to import all of the subclasses. If they were not loaded to the memory of interpreter, they simply will not be registered.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>A less abstract example could be a plugin system for a linter (think about Pylint or flake8). By subclassing abstract Plugin class, we would be not only providing our custom checks but also registering the plugin. By the way, if you are looking how to write such a plugin for Pylint - check out my article on <a href="https://breadcrumbscollector.tech/writing-custom-checkers-for-pylint/">Writing custom checkers for Pylint</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>A declarative way of building GUI</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>Credit for this way amazing metaclasses application goes to Anders Hammarquist - author of EuroPython talk <a href="https://www.youtube.com/watch?v=gN1o7lIOXr4">Metaclasses for fun and profit: Making a declarative GUI implementation</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Basically, the idea is to turn imperative code responsible for building a GUI out of components...</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class MyWindow(Gtk.Window):
+    def __init__(self):
+        super().__init__(self, title="Hello, window!")
+        self.box = Gtk.VBox()
+        self.add(self.box)
+        self.label = GtkLabel(label="Hello, label!")
+        self.box.add(self.label)</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>...into this:</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class Top(Window):
+    title = "Hello, window!"
+    class Group(VBox):
+        class Title(Label):
+            label = '"Hello, label!"'</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>Just wow. It's impressive, because not only simplifies the resultant code, but also fits our minds much better. Visual composition by nesting classes looks more natural to us, given that the end result is very similar - components nested within each other.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>If you are interested about implementation details (and problems author had to overcome) see the talk. Code is available on bitbucket: <a href="https://bitbucket.org/iko/ep2016-declarative-gui/">https://bitbucket.org/iko/ep2016-declarative-gui/</a></p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Adding attributes - Django ORM's Model.DoesNotExist</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>If you have some experience with Django, you surely noticed that each model class gets dedicated DoesNotExist exception. The latter is an attribute on the class. But where does it come from? Well, Django uses metaclasses. For models, it does a lot of things from validation to dynamically adding a few attributes, i.e. DoesNotExist and MultipleObjectsReturned exceptions.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code># django/db/models/base.py:128
+        if not abstract:
+            new_class.add_to_class(
+                'DoesNotExist',
+                subclass_exception(
+                    'DoesNotExist',
+                    tuple(
+                        x.DoesNotExist for x in parents if hasattr(x, '_meta') and not x._meta.abstract
+                    ) or (ObjectDoesNotExist,),
+                    module,
+                    attached_to=new_class))
+            new_class.add_to_class(
+                'MultipleObjectsReturned',
+                subclass_exception(
+                    'MultipleObjectsReturned',
+                    tuple(
+                        x.MultipleObjectsReturned for x in parents if hasattr(x, '_meta') and not x._meta.abstract
+                    ) or (MultipleObjectsReturned,),
+                    module,
+                    attached_to=new_class))</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:heading --></p>
+<h2>Honourable mention: __init_subclass__</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>As you have noticed, metaclasses are quite verbose. For example, if we want to affect the entire hierarchy of classes, we need at least two classes (one for the metaclass and another one for the base class).</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>There is also a risk of falling into metaclasses conflict if we try to apply it in the middle of a hierarchy. For example, you won't be able to just use a custom metaclass for your Django model. You would have to use the trick I was leveraging - create a subclass of django.db.models.Model (django.db.models.base.ModelBase), write your own logic in __new__ and then create your own base class for all models, instead of using django.db.models.Model. Sounds like a lot of work.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Luckily for us, since Python3.6 there is another hook available: __init_subclass__. It is able to replace majority (if not all) metaclasses.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:code --></p>
+<pre class="wp-block-code"><code>class Strategy(abc.ABC):
+    _registry: Dict&#91;str, 'Strategy'] = {}
+
+    def __init_subclass__(cls, **kwargs):
+        """
+        This is implicitly a classmethod. It will be called only for classes lower in hierarchy, not for Strategy.
+        """
+        super().__init_subclass__(**kwargs)
+        Strategy._registry&#91;cls.name] = cls
+
+    @property
+    @abc.abstractmethod
+    def name(self):
+        pass
+
+    @abc.abstractmethod
+    def validate_credentials(self, login: str, password: str) -> bool:
+        pass
+
+    @classmethod
+    def for_name(cls, name: str) -> 'Strategy':
+        return StrategyMeta.registry&#91;name]()
+
+
+class AlwaysOk(Strategy):
+    name = 'always_ok'
+
+    def validate_credentials(self, login: str, password: str) -> bool:
+        return True
+
+# End result is the same
+Strategy.for_name('always_ok').validate_credentials('john', 'x')</code></pre>
+<p><!-- /wp:code --></p>
+<p><!-- wp:paragraph --></p>
+<p>For details, see <a href="https://www.python.org/dev/peps/pep-0487/">PEP 487</a>.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:heading --></p>
+<h2>Summary</h2>
+<p><!-- /wp:heading --></p>
+<p><!-- wp:paragraph --></p>
+<p>I know what you are thinking - all these metaclasses are useful only if you are writing a framework. That would be correct, but up to the point. If you discover a repetitive pattern in your project, why not think about metaclasses? </p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>The "meta" part is the key to see their usefulness ;) When you see that you're spending a lot of time or making mistakes while doing "the work", maybe there's a room for some "metawork"!</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Metaclasses can be used to the enforcement of conventions, guiding implementation or enable easy extendability.</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Do you know any other cool application of metaclasses? Share them in comments!</p>
+<p><!-- /wp:paragraph --></p>
+<p><!-- wp:paragraph --></p>
+<p>Source of image: <a href="https://pixabay.com/pl/illustrations/excalibur-miecz-polanie-kaprys-3445952/">https://pixabay.com/pl/illustrations/excalibur-miecz-polanie-kaprys-3445952/</a></p>
+<p><!-- /wp:paragraph --></p>
