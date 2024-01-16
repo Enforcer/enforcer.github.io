@@ -109,7 +109,7 @@ class AccountProjection(SqlAlchemyProjection):  # 4
         handle(event)</pre>
 <ol>
 <li>We start with a base class for all projections that will actually persist our <em>read model</em> in RDBMS. We will use excellent SQLAlchemy ORM for this, but instead of defining models, we'll go for SQLAlchemy Core API, what will give us a bit of performance boost.</li>
-<li>We need a <a href="http://docs.sqlalchemy.org/en/latest/core/connections.html#sqlalchemy.engine.Connection">Connection</a> object to use SQLAlchemy Core. One can be trivially obtained from a <a href="http://docs.sqlalchemy.org/en/latest/orm/session_api.html#sqlalchemy.orm.session.Session.connection">Session</a> or <a href="http://docs.sqlalchemy.org/en/latest/core/connections.html#sqlalchemy.engine.Engine.connect">Engine</a>.</li>
+<li>We need a <a href="https://docs.sqlalchemy.org/en/latest/core/connections.html#sqlalchemy.engine.Connection">Connection</a> object to use SQLAlchemy Core. One can be trivially obtained from a <a href="https://docs.sqlalchemy.org/en/latest/orm/session_api.html#sqlalchemy.orm.session.Session.connection">Session</a> or <a href="https://docs.sqlalchemy.org/en/latest/core/connections.html#sqlalchemy.engine.Engine.connect">Engine</a>.</li>
 <li>Every projection will have <em>handle </em>method accepting single argument - Event subclass instance</li>
 <li><em>AccountProjection</em> will take care of inserting/updating rows inside accounts table</li>
 <li>We can leverage <em>singledispatch</em> to avoid writing error-prone <em>if-elif-else</em> block or dictionary handling logic routing. Note that default implementation <em>does nothing </em>as it means we don't support an event that got there</li>

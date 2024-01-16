@@ -365,7 +365,7 @@ def winners(self):
 <p><em>The Dependency Rule</em> not only means ban on importing anything from upper layers, but also on passing objects that do not belong to layer which receives then. In other words, we cannot pass to Application or Domain objects which are not declared there or are not part of the standard library. In practice, one has to repack data from the outer world to different structure that will be comfortable to work with in Application layer.</p>
 <p><!-- /wp:paragraph --></p>
 <p><!-- wp:paragraph --></p>
-<p>The most vulnerable points are arguments list of <em>Use Cases</em>' methods. A very convenient solution is to leverage <a href="https://en.wikipedia.org/wiki/Data_transfer_object">Data Transfer Objects</a>. In Python, we have an excellent <a href="http://www.attrs.org/en/stable/">attrs</a> library (or much simpler alternative from the standard library - <a href="https://docs.python.org/3.7/library/dataclasses.html#module-dataclasses">dataclasses</a>):</p>
+<p>The most vulnerable points are arguments list of <em>Use Cases</em>' methods. A very convenient solution is to leverage <a href="https://en.wikipedia.org/wiki/Data_transfer_object">Data Transfer Objects</a>. In Python, we have an excellent <a href="https://www.attrs.org/en/stable/">attrs</a> library (or much simpler alternative from the standard library - <a href="https://docs.python.org/3.7/library/dataclasses.html#module-dataclasses">dataclasses</a>):</p>
 <p><!-- /wp:paragraph --></p>
 <p><!-- wp:code --></p>
 <pre class="wp-block-code"><code>@attr.s(auto_attribs=True)
@@ -488,7 +488,7 @@ assert all(isinstance(bid_id, int) for bid_id in request.bids_ids)</code></pre>
 <p>Please check out example project for the things that were not covered in this article (like returning data from Use Cases). https://github.com/Enforcer/clean-architecture-example-1</p>
 <p><!-- /wp:paragraph --></p>
 <p><!-- wp:paragraph --></p>
-<p>&lt;shameless advert&gt;You can also check out my <a href="http://cleanarchitecture.io/">upcoming book on the Clean Architecture</a>. &lt;/shameless advert&gt;</p>
+<p>&lt;shameless advert&gt;You can also check out my <a href="https://cleanarchitecture.io/">upcoming book on the Clean Architecture</a>. &lt;/shameless advert&gt;</p>
 <p><!-- /wp:paragraph --></p>
 <p><!-- wp:paragraph --></p>
 <p>For even more advanced example, checkout another repo of mine: <a href="https://github.com/Enforcer/clean-architecture">https://github.com/Enforcer/clean-architecture</a></p>

@@ -14,7 +14,7 @@ tags: []
 permalink: "/what-is-celery-beat-and-how-to-use-it/"
 ---
 <p><img class="aligncenter wp-image-49" src="{{ site.baseurl }}/assets/2017/03/celery_512.png" alt="" width="256" height="256" /></p>
-<p><a href="http://celeryproject.org">Celery</a> is a widely recognized distributed task queue for pythonic projects. Its sole purpose is to reduce load of web servers by delegating time-consuming tasks to separate processes. Our web servers should handle one request for no longer than a fraction of second, therefore running long tasks synchronously substantially reduces application's throughput.</p>
+<p><a href="https://celeryproject.org">Celery</a> is a widely recognized distributed task queue for pythonic projects. Its sole purpose is to reduce load of web servers by delegating time-consuming tasks to separate processes. Our web servers should handle one request for no longer than a fraction of second, therefore running long tasks synchronously substantially reduces application's throughput.</p>
 <p>So we are able to delegate and queue hard work elsewhere. Obviously, this has to be done explicitly. Sometimes we have to run some tasks periodically.  Let's say we have a business requirement:</p>
 <blockquote><p>Users pay for access to our service. Payment can be done only for one month. Doing so postpones account's expiration by 31 days. Expired accounts should be deactivated within 4 hours. Eventually e-mail with apropriate information should be send.</p></blockquote>
 <p>To fulfill such requirement, we would have to scan application's user list for expired accounts at least every 4 hours. That is where <strong>celery beat</strong> comes in. Its simply a celery periodic tasks scheduler.</p>
@@ -117,7 +117,7 @@ def get_expired_users():
 <p>Celery once again proves to be powerful tool. Celery beat is a great addition to passive celery worker and saves programmers from learning crond.</p>
 <h2>Further info:</h2>
 <ul>
-<li><a href="http://docs.celeryproject.org/en/latest/userguide/periodic-tasks.html">celery beat manual</a></li>
-<li><a href="http://docs.celeryproject.org/en/latest/userguide/canvas.html">designing tasks workflows</a></li>
-<li>working example, ready to use with docker-compose <a href="http://github.com/Enforcer/celery-beat-example">http://github.com/Enforcer/celery-beat-example</a></li>
+<li><a href="https://docs.celeryproject.org/en/latest/userguide/periodic-tasks.html">celery beat manual</a></li>
+<li><a href="https://docs.celeryproject.org/en/latest/userguide/canvas.html">designing tasks workflows</a></li>
+<li>working example, ready to use with docker-compose <a href="https://github.com/Enforcer/celery-beat-example">https://github.com/Enforcer/celery-beat-example</a></li>
 </ul>

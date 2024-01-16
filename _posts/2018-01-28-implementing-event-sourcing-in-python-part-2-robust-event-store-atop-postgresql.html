@@ -176,7 +176,7 @@ class EventModel(Base):
         event_class: typing.Type[Event] = getattr(events, class_name)
         return event_class(**kwargs)</pre>
 <p>There are no tricky things inside beside translating models to events classes.</p>
-<p><strong>WARNING: one should consider abandoning ORM in favour of <a href="http://docs.sqlalchemy.org/en/latest/core/tutorial.html">SQLAlchemy core</a> or even raw queries to gain some performance boost. ORM does not add much value here and is definitely less efficient than other methods.</strong></p>
+<p><strong>WARNING: one should consider abandoning ORM in favour of <a href="https://docs.sqlalchemy.org/en/latest/core/tutorial.html">SQLAlchemy core</a> or even raw queries to gain some performance boost. ORM does not add much value here and is definitely less efficient than other methods.</strong></p>
 <p><em>append_to_stream</em> is a bit more complicated:</p>
 <pre class="lang:python decode:true  ">    def append_to_stream(
             self,
@@ -233,7 +233,7 @@ class EventModel(Base):
             payload = json.dumps(event_as_dict)
             connection.execute(f'NOTIFY events, \'{aggregate_uuid_str}_{event.__class__.__name__}_{payload}\'')</pre>
 <p>Bear in mind that notifications will not be send until transaction is commited. Also listeners should operate in a non-transactional mode. Read more about caveats in <a href="https://www.postgresql.org/docs/10/static/sql-notify.html">NOTIFY</a> and <a href="https://www.postgresql.org/docs/10/static/sql-listen.html">LISTEN</a> docs.</p>
-<p>An exemplary listener code using <a href="http://aiopg.readthedocs.io/en/stable/index.html">aiopg</a> and asyncio:</p>
+<p>An example listener code using <a href="https://aiopg.readthedocs.io/en/stable/index.html">aiopg</a> and asyncio:</p>
 <pre class="lang:python decode:true">import asyncio
 import aiopg
 

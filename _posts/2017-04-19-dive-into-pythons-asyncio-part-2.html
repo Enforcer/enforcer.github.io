@@ -22,7 +22,7 @@ permalink: "/dive-into-pythons-asyncio-part-2/"
 <li>Use only co-operative libraries for blocking I/O operations (or the other way round - do not use not co-operative ones)</li>
 <li>Don't do CPU intensive operations in the same process, because they will effectively freeze whole application during calculations</li>
 </ul>
-<p>First point has some serious implications. Namely, it means that you have to replace many libraries from your stack. Forget <a href="http://docs.python-requests.org/en/master/">requests</a>, for instance. Embrace <a href="http://aiohttp.readthedocs.io/en/stable/">aiohttp</a> instead. An exhaustive list of available libraries can be found on github in <a href="https://github.com/timofurrer/awesome-asyncio">awesome asyncio</a> repository.</p>
+<p>First point has some serious implications. Namely, it means that you have to replace many libraries from your stack. Forget <a href="https://docs.python-requests.org/en/master/">requests</a>, for instance. Embrace <a href="https://aiohttp.readthedocs.io/en/stable/">aiohttp</a> instead. An exhaustive list of available libraries can be found on github in <a href="https://github.com/timofurrer/awesome-asyncio">awesome asyncio</a> repository.</p>
 <p>To better understand why this is so important, let's consider following example:</p>
 <pre class="lang:python decode:true">from aiohttp import web
 
@@ -75,12 +75,12 @@ app.router.add_get('/{name}', handle)
 web.run_app(app, host='127.0.0.1', port=8001)
 </pre>
 <p>This is an extension of the previous example. Now, on every request (<strong>#1</strong>) we GET this blog's feed (<strong>#2</strong>), decode XML (<strong>#3</strong>) and extract build date (<strong>#4</strong>). Whole logic of HTTP client is enclosed in a seperate coroutine, <em>fetch</em>.</p>
-<p>We see usage of new keyword - <em>await</em>. Thing to bear in mind is that asyncio's event loop can switch execution context on every <em>await</em>. Assuming that getting data from <a href="http://breadcrumbscollector.tech/feed/">breadcrumbscollector.tech/feed/</a> takes a lot of time, <strong>#5</strong> will probably be the place where switching between clients will occur most frequently. To illustrate this, refer to the image below. Red pointer shows asyncio's execution path:</p>
-<p><img class="aligncenter size-full" src="{{ site.baseurl }}/assets/2017/04/asyncio-flow.png" width="438" height="362" /></p>
+<p>We see usage of new keyword - <em>await</em>. Thing to bear in mind is that asyncio's event loop can switch execution context on every <em>await</em>. Assuming that getting data from <a href="https://breadcrumbscollector.tech/feed/">breadcrumbscollector.tech/feed/</a> takes a lot of time, <strong>#5</strong> will probably be the place where switching between clients will occur most frequently. To illustrate this, refer to the image below. Red pointer shows asyncio's execution path:</p>
+<p><img class="aligncenter size-full" src="{{ site.baseurl }}/assets/2017/04/asyncio-flow.png" width="438" height="362" alt="Asyncio flow (missing image)" /></p>
 <p>We see that during handling first client's request another client requested something. We are not able to serve them in parallel, so we wait until convenient moment. It occurs when first client's request handling encounters <em>await session.get</em>. Since event loop has nothing better to do right then, it starts executing second client's request handling logic. This execution switch is marked in the picture as <strong>Client Switch #1</strong>. Therefore, we are able to utilize our CPU more and handle more clients in the same period of time.</p>
 <p>&nbsp;</p>
 <p>What if we couldn't suspend execution on blocking operations with no other means providing concurrent clients handling? One can easily find themselves in such situation without co-operative libraries.</p>
-<p><img class="aligncenter size-full" src="{{ site.baseurl }}/assets/2017/04/asyncio-flow2.png" width="558" height="378" /></p>
+<p><img class="aligncenter size-full" src="{{ site.baseurl }}/assets/2017/04/asyncio-flow2.png" width="558" height="378" alt="Asyncio flow (missing image)" /></p>
 <p>What we see in the picture above is called serialization. Application is able to handle only one request at the same time. Obviously, we can't afford it, because client's of this app shouldn't wait in such queue - no matter if they are humans or other applications - this becomes a bottleneck.</p>
 <p>This is the case we should avoid like the plague when doing asynchronous I/O. Always use co-operative libraries and you should be fine.</p>
 <p>However, this explanation adheres only to one of aforementioned problems. The second issue, CPU-intensive operations can not be simply adressed by using some magic 'co-operative libraries'.</p>

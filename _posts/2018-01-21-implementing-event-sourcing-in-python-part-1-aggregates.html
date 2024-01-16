@@ -162,7 +162,7 @@ order.set_status('shipped')  # 4</pre>
 <p>That's basically everything about event sourcing aggregates. Now let's see how we can implement it in a bit more clever way</p>
 <h2>Implementation improvements</h2>
 <h3>Events</h3>
-<p>We had to manually write classes and support __eq__ operation. We could use <a href="https://docs.python.org/3.6/library/collections.html#collections.namedtuple">namedtuples</a> or <a href="http://attrs.org/">attrs</a> library instead:</p>
+<p>We had to manually write classes and support __eq__ operation. We could use <a href="https://docs.python.org/3.6/library/collections.html#collections.namedtuple">namedtuples</a> or <a href="https://attrs.org/">attrs</a> library instead:</p>
 <pre class="lang:default decode:true">import attr
 
 
