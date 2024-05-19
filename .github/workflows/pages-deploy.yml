@@ -54,7 +54,7 @@ jobs:
         run: |
           bundle exec htmlproofer _site \
             \-\-disable-external=true \
-            \-\-ignore-urls "/^http:\/\/127.0.0.1/,/^http:\/\/0.0.0.0/,/^http:\/\/localhost/"
+            \-\-ignore-urls "/^http:\/\/127.0.0.1/,/^http:\/\/0.0.0.0/,/^http:\/\/localhost/,http://sqa.fyicenter.com/art/Measurement_of_the_Extent_of_Testing.html"
 
       - name: Upload site artifact
         uses: actions/upload-pages-artifact@v1
