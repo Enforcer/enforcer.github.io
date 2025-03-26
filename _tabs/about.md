@@ -21,3 +21,4 @@ Check out my [Github profile](https://github.com/Enforcer/) to see other cool th
 It’s a reference to _I, Robot_ movie. 😉 We need to go deeper, though. If we were to interpret that literally, collecting breadcrumbs in _I, Robot_ stands for Detective Spooner gathering more and more evidence during his investigation. Meanwhile, the character played by Will Smith mentions the phrase several times after noticing it in a fairy tale, Hansel and Gretel.
 
 In the context of this blog, collecting breadcrumbs means an act of learning new things, documented by one post at a time.
+
