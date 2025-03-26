@@ -1,7 +1,6 @@
 --- 
 layout: post
 title: Four strategies to automate tests with 3rd party APIs used in the application
-description: d
 date: 2023-04-27 18:14:19 +0100
 published: true 
 categories: []

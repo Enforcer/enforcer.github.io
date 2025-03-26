@@ -4,7 +4,7 @@ icon: fas fa-info-circle
 order: 4
 ---
 
-![Desktop View](/assets/img/profile.jpg){: .left }
+![Desktop View](/assets/img/morda.jpeg)
 
 ## Sebastian Buczyński
 
