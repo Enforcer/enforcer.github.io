@@ -99,7 +99,7 @@ If we get such a requirement, we can resort to one of auxiliary questions:
 
 ## Benefits
 
-One needs to be aware that code coverage is NOT a metric of how extensively a system is tested. That one is really tricky to measure. After all, we can only test what we know. Here’s an article that elaborates on the topic: [Measurement of the Extent of Testing](http://sqa.fyicenter.com/art/Measurement_of_the_Extent_of_Testing.html).
+One needs to be aware that code coverage is NOT a metric of how extensively a system is tested. That one is really tricky to measure. After all, we can only test what we know. Here’s an article that elaborates on the topic: [Measurement of the Extent of Testing](https://sqa.fyicenter.com/art/Measurement_of_the_Extent_of_Testing.html).
 
 However, 100% code coverage at least makes sure every line of code is exercised. That’s (from my experience) just enough to:
 
