@@ -76,10 +76,6 @@ Long running experiments and a big number of them are two typical red flags.
 
 ## Conclusion
 
-![Professionals have standards](/assets/2025/professionals_have_standards.jpg){: width="700" height="400" }
-
-![Ben Kenobi saying it's him](/assets/2025/ben_kenobi.jpg){: width="700" height="400" }
-
 As a professional, you shouldn't allow for a situation when you have lots of half-baked code in production (unless you work in startup).
 
 This is detrimental to productivity and wellbeing.
