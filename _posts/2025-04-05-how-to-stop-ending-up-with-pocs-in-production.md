@@ -14,7 +14,7 @@ The list can go on.
 
 ## Whose fault is that?!
 
-![Ben Kenobi saying it's him](../assets/2025/ben_kenobi.jpg){: width="700" height="400" }
+![Ben Kenobi saying it's him](/assets/2025/ben_kenobi.jpg){: width="700" height="400" }
 
 Perhaps you've experienced something similar. Maybe even it was you who pushed PoC to production. You certainly didn't mean for it to end up like this because it's obvious from the start that this will end up being a huge pain in the neck.
 
@@ -76,7 +76,9 @@ Long running experiments and a big number of them are two typical red flags.
 
 ## Conclusion
 
-![Professionals have standards](../assets/2025/professionals_have_standards.jpg){: width="700" height="400" }
+![Professionals have standards](/assets/2025/professionals_have_standards.jpg){: width="700" height="400" }
+
+![Ben Kenobi saying it's him](/assets/2025/ben_kenobi.jpg){: width="700" height="400" }
 
 As a professional, you shouldn't allow for a situation when you have lots of half-baked code in production (unless you work in startup).
 
