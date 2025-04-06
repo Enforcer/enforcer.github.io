@@ -42,7 +42,7 @@ It can be a throwaway script or manual changes made in configuration that will b
 
 It is not meant to be deployed in production as part of the actual application. It is only to prove that a certain approach to implementation is reasonable.
 
-To me, word "prototype" is a synonym. And a protype can be build in staging/test environment or on a local computer, even with another programming language.
+To me, word "prototype" is a synonym. And a protype can be built in staging/test environment or on a local computer, even with another programming language.
 
 ## Meet Walking Skeleton
 
