@@ -15,3 +15,8 @@ test:
 .PHONY: build
 build:
 	docker run -p 4000:4000 -p 35729:35729 -it -v $(DIRECTORY):/blog blog_jekyll bundle exec jekyll b -d "_site"
+
+# Example: env NAME="Things I did as a junior python developer but wouldn't do today" make post
+.PHONY: post
+post:
+	docker run -v $(DIRECTORY):/blog blog_jekyll bundle exec jekyll post "$(NAME)"

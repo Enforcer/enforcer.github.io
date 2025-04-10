@@ -17,3 +17,4 @@ gem "jekyll-plantuml"
 gem "hpricot"
 gem "open_uri_redirections"
 gem "safe_yaml"
+gem 'jekyll-compose', group: [:jekyll_plugins]
